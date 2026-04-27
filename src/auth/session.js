@@ -19,21 +19,27 @@ class Session {
     this.playerId = null;
     this.world = config.account.world;
     this.baseUrl = `https://${this.world}.grepolis.com`;
+
+    // Leid het portaal af uit de world-naam: nl132 → nl-play, de67 → de-play, etc.
+    const langPrefix = this.world.match(/^([a-z]+)/)?.[1] ?? "en";
+    this.portal = config.account.portal || `https://${langPrefix}-play.grepolis.com`;
+    logger.info(`Login-portaal: ${this.portal}`);
   }
 
   async login() {
     logger.info("Inloggen bij Grepolis...");
 
-    // Stap 1: Laad de startpagina om sessie-cookies op te pakken
-    const startPage = await this.client.get("https://www.grepolis.com/start", {
-      headers: this._headers("https://www.grepolis.com/"),
+    // Stap 1: Laad de portaalpagina om cookies op te pakken
+    const startPage = await this.client.get(`${this.portal}/`, {
+      headers: this._headers(`${this.portal}/`),
     });
 
     // Haal de authenticity_token op uit het login-formulier
     const tokenMatch = startPage.data.match(/authenticity_token[^>]+value="([^"]+)"/);
     const authToken = tokenMatch ? tokenMatch[1] : "";
+    logger.info(`Authenticity token gevonden: ${authToken ? "ja" : "nee"}`);
 
-    // Stap 2: POST het login-formulier
+    // Stap 2: POST het login-formulier naar het portaal
     const formData = new URLSearchParams({
       "user[login]":      this.config.account.username,
       "user[password]":   this.config.account.password,
@@ -42,29 +48,30 @@ class Session {
       commit: "Aanmelden",
     });
 
-    const loginRes = await this.client.post(
-      "https://www.grepolis.com/login",
+    await this.client.post(
+      `${this.portal}/login`,
       formData.toString(),
       {
         headers: {
-          ...this._headers("https://www.grepolis.com/start"),
+          ...this._headers(`${this.portal}/`),
           "Content-Type": "application/x-www-form-urlencoded",
         },
       }
     );
 
-    // Stap 3: Controleer of login gelukt is door gamepagina te laden
-    const finalUrl = loginRes.request?.res?.responseUrl || "";
-    logger.info(`Redirect naar: ${finalUrl}`);
-
+    // Stap 3: Laad de gamepagina om te verifiëren
     const gameRes = await this.client.get(
       `${this.baseUrl}/game/${this.world}`,
-      { headers: this._headers("https://www.grepolis.com/") }
+      { headers: this._headers(`${this.portal}/`) }
     );
 
     if (gameRes.status !== 200 || !gameRes.data.includes("player_id")) {
+      // Extra debug info
+      logger.error(`Game pagina status: ${gameRes.status}`);
+      logger.error(`Bevat 'player_id': ${gameRes.data.includes("player_id")}`);
+      logger.error(`Eerste 500 tekens van response: ${gameRes.data.substring(0, 500)}`);
       throw new Error(
-        "Login mislukt — controleer je e-mailadres, wachtwoord en world-naam (bv. nl132) in config.json."
+        "Login mislukt — e-mailadres of wachtwoord incorrect, of world-naam klopt niet."
       );
     }
 
