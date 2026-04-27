@@ -5,69 +5,65 @@ class GrepolisAPI {
     this.session = session;
   }
 
-  // Steden zitten al in de gamepagina HTML — geen extra API-call nodig
   async getTowns() {
-    const html = this.session.lastHtml;
-    if (!html) throw new Error("Geen gamepagina beschikbaar in sessie.");
+    // Grepolis vereist player_id in de payload voor town-gerelateerde calls
+    const playerId = this.session.playerId;
+    const toTry = [
+      { action: "getTowns",            extra: { player_id: playerId } },
+      { action: "fetchTowns",          extra: { player_id: playerId } },
+      { action: "getTownsForPlayer",   extra: { player_id: playerId } },
+      { action: "fetchTownsForPlayer", extra: { player_id: playerId } },
+      { action: "getTowns",            extra: { } },
+    ];
 
-    // Grepolis stopt steden in ITowns.add({...}) in de HTML
-    const towns = [];
-    const pattern = /ITowns\.add\((\{[\s\S]*?\})\)/g;
-    let match;
-    while ((match = pattern.exec(html)) !== null) {
+    for (const { action, extra } of toTry) {
       try {
-        const obj = JSON.parse(match[1]);
-        Object.values(obj).forEach(t => towns.push(t));
-      } catch (_) {}
+        const data = await this.session.ajax(action, 0, extra);
+        const unwrapped = data?.json ?? data;
+        const raw = JSON.stringify(unwrapped).substring(0, 300);
+        logger.info(`[API] ${action}: ${raw}`);
+
+        if (unwrapped?.towns) {
+          const towns = Object.values(unwrapped.towns);
+          if (towns.length > 0) {
+            logger.info(`[API] ${towns.length} steden gevonden via "${action}"`);
+            return towns;
+          }
+        }
+        if (unwrapped?.error) {
+          logger.warn(`[API] ${action} fout: ${unwrapped.error}`);
+        }
+      } catch (err) {
+        logger.warn(`[API] ${action} exception: ${err.message}`);
+      }
     }
 
-    if (towns.length > 0) {
-      logger.info(`[API] ${towns.length} steden gevonden via ITowns in HTML`);
-      return towns;
+    // Laatste kans: probeer via player_id in de town_id positie
+    try {
+      const data = await this.session.ajax("getTowns", playerId);
+      const unwrapped = data?.json ?? data;
+      logger.info(`[API] getTowns(town_id=player_id): ${JSON.stringify(unwrapped).substring(0, 300)}`);
+      if (unwrapped?.towns) return Object.values(unwrapped.towns);
+    } catch (err) {
+      logger.warn(`[API] Laatste poging mislukt: ${err.message}`);
     }
 
-    // Fallback: zoek op andere patronen
-    const alt = html.match(/"towns"\s*:\s*(\{[^}]{10,}\})/);
-    if (alt) {
-      try {
-        const obj = JSON.parse(alt[1]);
-        const list = Object.values(obj);
-        logger.info(`[API] ${list.length} steden gevonden via "towns" patroon`);
-        return list;
-      } catch (_) {}
-    }
-
-    // Log stuk HTML rond "town" voor diagnose
-    const idx = html.indexOf("ITowns");
-    if (idx !== -1) {
-      logger.info(`[API] ITowns context: ${html.substring(idx, idx + 300)}`);
-    } else {
-      logger.warn("[API] 'ITowns' niet gevonden in HTML");
-      // Log stuk rond 'town_id' als alternatief
-      const idx2 = html.indexOf("town_id");
-      if (idx2 !== -1) logger.info(`[API] town_id context: ${html.substring(idx2, idx2 + 300)}`);
-    }
-
-    throw new Error("Kon steden niet vinden in gamepagina.");
+    throw new Error("Kon steden niet ophalen — zie logs.");
   }
 
   async getFarmingVillages(townId) {
     const data = await this.session.ajax("fetchFarmTowns", townId);
     const unwrapped = data?.json ?? data;
+    logger.info(`[API] getFarmingVillages(${townId}): ${JSON.stringify(unwrapped).substring(0, 300)}`);
 
     if (unwrapped?.farm_towns) return Object.values(unwrapped.farm_towns);
-    if (unwrapped?.error) logger.warn(`[API] getFarmingVillages fout: ${unwrapped.error}`);
-
-    // Log de response zodat we de structuur kunnen zien
-    logger.info(`[API] getFarmingVillages response: ${JSON.stringify(data).substring(0, 300)}`);
     return [];
   }
 
   async farmVillage(townId, farmTownId, mode = "loot") {
     const action = mode === "demand" ? "farmTownDemand" : "farmTownLoot";
     const data = await this.session.ajax(action, townId, { farm_town_id: farmTownId });
-    const unwrapped = data?.json ?? data;
-    return unwrapped;
+    return data?.json ?? data;
   }
 }
 
