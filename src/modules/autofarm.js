@@ -17,9 +17,9 @@ class Autofarm {
       logger.info("[Autofarm] Uitgeschakeld in config.");
       return;
     }
-    logger.info("[Autofarm] Gestart.");
+    logger.info("[Autofarm] Gestart — eerste ronde begint direct.");
     this.running = true;
-    this._schedule();
+    this.run();
   }
 
   stop() {
