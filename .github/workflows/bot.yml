@@ -17,11 +17,10 @@ jobs:
       - name: Node.js instellen
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
+          node-version: "24"
 
       - name: Dependencies installeren
-        run: npm ci --omit=dev
+        run: npm install --omit=dev
 
       - name: Cookies wegschrijven
         run: echo '${{ secrets.GREPO_COOKIES }}' > cookies.json
