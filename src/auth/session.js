@@ -133,6 +133,27 @@ class Session {
       "Referer": `${this.baseUrl}/game/${this.world}`,
     };
   }
-}
+  // POST naar Grepolis game endpoints (voor acties zoals claim_loads)
+  async gamePost(endpoint, townId, action, jsonPayload = null) {
+    const params = new URLSearchParams({
+      town_id: townId,
+      action:  action,
+      h:       this.csrfToken,
+    });
 
-module.exports = Session;
+    const formData = new URLSearchParams();
+    if (jsonPayload) formData.set("json", jsonPayload);
+
+    const url = `${this.baseUrl}/game/${endpoint}?${params.toString()}`;
+    const res = await this.client.post(url, formData.toString(), {
+      headers: {
+        ...this._headers(),
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "X-Requested-With": "XMLHttpRequest",
+        "Accept": "application/json, text/javascript, */*",
+      },
+    });
+    return res.data?.json ?? res.data;
+  }
+
+}
