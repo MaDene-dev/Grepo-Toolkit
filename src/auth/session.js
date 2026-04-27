@@ -107,32 +107,9 @@ class Session {
         "Accept": "application/json, text/javascript, */*",
       },
     });
-    // Grepolis wikkelt responses soms in {"json": {...}}
     return res.data?.json ?? res.data;
   }
 
-  // POST naar frontend_bridge (voor andere acties)
-  async ajax(action, townId, extraData = {}) {
-    if (!this.csrfToken) throw new Error("Geen actieve sessie.");
-    const payload = new URLSearchParams({
-      town_id: townId, action_name: action, ...extraData, h: this.csrfToken,
-    });
-    const res = await this.client.post(
-      `${this.baseUrl}/game/${this.world}/frontend_bridge.php`,
-      payload.toString(),
-      { headers: { ...this._headers(), "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "X-Requested-With": "XMLHttpRequest" } }
-    );
-    return res.data?.json ?? res.data;
-  }
-
-  _headers() {
-    return {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "Accept-Language": "nl-BE,nl;q=0.9,en;q=0.7",
-      "Referer": `${this.baseUrl}/game/${this.world}`,
-    };
-  }
   // POST naar Grepolis game endpoints (voor acties zoals claim_loads)
   async gamePost(endpoint, townId, action, jsonPayload = null) {
     const params = new URLSearchParams({
@@ -156,4 +133,14 @@ class Session {
     return res.data?.json ?? res.data;
   }
 
+  _headers() {
+    return {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "nl-BE,nl;q=0.9,en;q=0.7",
+      "Referer": `${this.baseUrl}/game/${this.world}`,
+    };
+  }
 }
+
+module.exports = Session;
