@@ -56,6 +56,7 @@ class Session {
       headers: this._headers(),
     });
     logger.info(`Status: ${res.status} | Grootte: ${res.data.length} bytes`);
+    this.lastHtml = res.data; // bewaar voor town-parsing
 
     const html = res.data;
 
