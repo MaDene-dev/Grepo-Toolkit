@@ -23,6 +23,7 @@ class Session {
     this.playerId = config.account.player_id || null;
     this.world = config.account.world;
     this.baseUrl = `https://${this.world}.grepolis.com`;
+    this.lastHtml = null;
   }
 
   async login() {
@@ -56,46 +57,24 @@ class Session {
       headers: this._headers(),
     });
     logger.info(`Status: ${res.status} | Grootte: ${res.data.length} bytes`);
-    this.lastHtml = res.data; // bewaar voor town-parsing
+    this.lastHtml = res.data;
 
-    const html = res.data;
-
-    // Zoek en log de context rondom bekende sleutelwoorden
-    const keywords = ["csrf_token", "csrfToken", "csrf", '"h":', "GrepolisData", "bootstrap", "var Game"];
-    for (const kw of keywords) {
-      const idx = html.indexOf(kw);
-      if (idx !== -1) {
-        const snippet = html.substring(Math.max(0, idx - 30), idx + 200);
-        logger.info(`Gevonden [${kw}] op positie ${idx}:\n  ...${snippet}...`);
-      } else {
-        logger.info(`Niet gevonden: [${kw}]`);
-      }
-    }
-
-    // Probeer alle patronen
-    this._extractAll(html);
+    this._extractCsrf(res.data);
 
     if (!this.csrfToken) {
-      throw new Error("Geen CSRF-token gevonden. Bekijk de snippets hierboven.");
+      throw new Error("Geen CSRF-token gevonden. Cookies mogelijk verlopen — exporteer opnieuw.");
     }
 
     logger.info(`✓ Sessie OK | player_id: ${this.playerId} | csrf: ${this.csrfToken.substring(0, 8)}...`);
   }
 
-  _extractAll(html) {
+  _extractCsrf(html) {
     const patterns = [
-      // Standaard JSON object patronen
-      /"csrf_token"\s*:\s*"([^"]{8,})"/,
       /"csrfToken"\s*:\s*"([^"]{8,})"/,
-      /csrf_token\s*=\s*'([^']{8,})'/,
+      /"csrf_token"\s*:\s*"([^"]{8,})"/,
       /csrf_token\s*=\s*"([^"]{8,})"/,
-      /csrfToken\s*[:=]\s*"([^"]{8,})"/,
-      // "h" is de CSRF param naam in Grepolis frontend bridge calls
-      /[,{]\s*"h"\s*:\s*"([^"]{8,})"/,
-      // Meta tag
       /<meta[^>]+name=["']csrf-token["'][^>]+content=["']([^"']+)["']/,
     ];
-
     for (const pat of patterns) {
       const m = html.match(pat);
       if (m) {
@@ -104,14 +83,35 @@ class Session {
         return;
       }
     }
-
-    // player_id
     if (!this.playerId) {
       const pid = html.match(/"player_id"\s*:\s*(\d+)/);
-      if (pid) { this.playerId = parseInt(pid[1]); logger.info(`player_id gevonden: ${this.playerId}`); }
+      if (pid) this.playerId = parseInt(pid[1]);
     }
   }
 
+  // GET request naar Grepolis game endpoints
+  async gameGet(endpoint, townId, action, jsonPayload = null) {
+    const params = new URLSearchParams({
+      town_id: townId,
+      action:  action,
+      h:       this.csrfToken,
+      _:       Date.now(),
+    });
+    if (jsonPayload) params.set("json", jsonPayload);
+
+    const url = `${this.baseUrl}/game/${endpoint}?${params.toString()}`;
+    const res = await this.client.get(url, {
+      headers: {
+        ...this._headers(),
+        "X-Requested-With": "XMLHttpRequest",
+        "Accept": "application/json, text/javascript, */*",
+      },
+    });
+    // Grepolis wikkelt responses soms in {"json": {...}}
+    return res.data?.json ?? res.data;
+  }
+
+  // POST naar frontend_bridge (voor andere acties)
   async ajax(action, townId, extraData = {}) {
     if (!this.csrfToken) throw new Error("Geen actieve sessie.");
     const payload = new URLSearchParams({
@@ -120,15 +120,9 @@ class Session {
     const res = await this.client.post(
       `${this.baseUrl}/game/${this.world}/frontend_bridge.php`,
       payload.toString(),
-      {
-        headers: {
-          ...this._headers(),
-          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-          "X-Requested-With": "XMLHttpRequest",
-        },
-      }
+      { headers: { ...this._headers(), "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "X-Requested-With": "XMLHttpRequest" } }
     );
-    return res.data;
+    return res.data?.json ?? res.data;
   }
 
   _headers() {
@@ -142,15 +136,3 @@ class Session {
 }
 
 module.exports = Session;
-
-// Wordt achteraf toegevoegd aan de klasse via prototype
-Session.prototype.getJson = async function(path) {
-  const res = await this.client.get(`${this.baseUrl}${path}`, {
-    headers: {
-      ...this._headers(),
-      "X-Requested-With": "XMLHttpRequest",
-      "Accept": "application/json, text/javascript, */*",
-    },
-  });
-  return res.data;
-};
