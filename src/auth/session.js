@@ -20,7 +20,6 @@ class Session {
     this.world = config.account.world;
     this.baseUrl = `https://${this.world}.grepolis.com`;
 
-    // Leid het portaal af uit de world-naam: nl132 → nl-play, de67 → de-play, etc.
     const langPrefix = this.world.match(/^([a-z]+)/)?.[1] ?? "en";
     this.portal = config.account.portal || `https://${langPrefix}-play.grepolis.com`;
     logger.info(`Login-portaal: ${this.portal}`);
@@ -29,17 +28,16 @@ class Session {
   async login() {
     logger.info("Inloggen bij Grepolis...");
 
-    // Stap 1: Laad de portaalpagina om cookies op te pakken
+    // Stap 1: Startpagina laden
     const startPage = await this.client.get(`${this.portal}/`, {
       headers: this._headers(`${this.portal}/`),
     });
 
-    // Haal de authenticity_token op uit het login-formulier
     const tokenMatch = startPage.data.match(/authenticity_token[^>]+value="([^"]+)"/);
     const authToken = tokenMatch ? tokenMatch[1] : "";
-    logger.info(`Authenticity token gevonden: ${authToken ? "ja" : "nee"}`);
+    logger.info(`Authenticity token: ${authToken ? "gevonden" : "niet gevonden"}`);
 
-    // Stap 2: POST het login-formulier naar het portaal
+    // Stap 2: Inloggen
     const formData = new URLSearchParams({
       "user[login]":      this.config.account.username,
       "user[password]":   this.config.account.password,
@@ -48,46 +46,91 @@ class Session {
       commit: "Aanmelden",
     });
 
-    await this.client.post(
-      `${this.portal}/login`,
-      formData.toString(),
-      {
-        headers: {
-          ...this._headers(`${this.portal}/`),
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-      }
-    );
+    await this.client.post(`${this.portal}/login`, formData.toString(), {
+      headers: {
+        ...this._headers(`${this.portal}/`),
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+    });
 
-    // Stap 3: Laad de gamepagina om te verifiëren
-    const gameRes = await this.client.get(
+    // Stap 3: Game-sessiedata ophalen via de JSON bootstrap API
+    // Grepolis laadt speldata via deze endpoint na de SPA-init
+    const bootstrapRes = await this.client.get(
       `${this.baseUrl}/game/${this.world}`,
-      { headers: this._headers(`${this.portal}/`) }
+      { headers: { ...this._headers(`${this.portal}/`), Accept: "application/json, text/javascript, */*" } }
     );
 
-    if (gameRes.status !== 200 || !gameRes.data.includes("player_id")) {
-      // Extra debug info
-      logger.error(`Game pagina status: ${gameRes.status}`);
-      logger.error(`Bevat 'player_id': ${gameRes.data.includes("player_id")}`);
-      logger.error(`Eerste 500 tekens van response: ${gameRes.data.substring(0, 500)}`);
-      throw new Error(
-        "Login mislukt — e-mailadres of wachtwoord incorrect, of world-naam klopt niet."
-      );
+    // Probeer CDATA / inline script blok te vinden (Game = {...})
+    const cdataMatch = bootstrapRes.data.match(/\/\*\s*<!\[CDATA\[[\s\S]*?\/\*\s*\]\]>/);
+    const scriptContent = cdataMatch ? cdataMatch[0] : bootstrapRes.data;
+
+    // Zoek player_id op meerdere manieren
+    const pidPatterns = [
+      /["']?player_id["']?\s*[:=]\s*(\d+)/,
+      /"player_id"\s*:\s*(\d+)/,
+      /player_id=(\d+)/,
+    ];
+    for (const pat of pidPatterns) {
+      const m = scriptContent.match(pat) || bootstrapRes.data.match(pat);
+      if (m) { this.playerId = parseInt(m[1]); break; }
     }
 
-    this._extractGameData(gameRes.data);
-    logger.info(`Sessie OK — player_id: ${this.playerId}, world: ${this.world}`);
+    // Zoek csrf_token op meerdere manieren
+    const csrfPatterns = [
+      /["']?csrf_token["']?\s*[:=]\s*["']([a-f0-9]{20,})["']/,
+      /"csrf_token"\s*:\s*"([a-f0-9]{20,})"/,
+    ];
+    for (const pat of csrfPatterns) {
+      const m = scriptContent.match(pat) || bootstrapRes.data.match(pat);
+      if (m) { this.csrfToken = m[1]; break; }
+    }
+
+    // Als CSRF nog steeds niet gevonden: probeer meta-tag
+    if (!this.csrfToken) {
+      const metaMatch = bootstrapRes.data.match(/<meta[^>]+name=["']csrf-token["'][^>]+content=["']([^"']+)["']/);
+      if (metaMatch) this.csrfToken = metaMatch[1];
+    }
+
+    // Als player_id nog niet gevonden: haal het uit de URL die we van Grepolis kregen
+    if (!this.playerId && this.config.account.player_id) {
+      this.playerId = this.config.account.player_id;
+      logger.info(`player_id uit config gebruikt: ${this.playerId}`);
+    }
+
+    // Als CSRF token nog steeds ontbreekt, probeer via directe API-call
+    if (!this.csrfToken) {
+      logger.info("CSRF niet in HTML gevonden, probeer API bootstrap...");
+      await this._fetchCsrfViaApi();
+    }
+
+    logger.info(`player_id: ${this.playerId ?? "niet gevonden"}`);
+    logger.info(`csrf_token: ${this.csrfToken ? "gevonden" : "niet gevonden"}`);
+
+    if (!this.csrfToken) {
+      logger.error("Eerste 1500 tekens response:\n" + bootstrapRes.data.substring(0, 1500));
+      throw new Error("Geen CSRF-token gevonden. Zie logs voor details.");
+    }
+
+    logger.info(`Sessie OK — world: ${this.world}`);
   }
 
-  _extractGameData(html) {
-    const csrfMatch = html.match(/csrf_token["'\s:]+["']([a-f0-9]{20,})["']/);
-    if (csrfMatch) this.csrfToken = csrfMatch[1];
-
-    const pidMatch = html.match(/player_id["'\s:]+(\d+)/);
-    if (pidMatch) this.playerId = parseInt(pidMatch[1]);
-
-    if (!this.csrfToken) throw new Error("Geen CSRF-token gevonden na login.");
-    if (!this.playerId)  throw new Error("Geen player_id gevonden na login.");
+  // Probeer CSRF via een bekende lichtgewicht API endpoint
+  async _fetchCsrfViaApi() {
+    const endpoints = [
+      `/game/${this.world}/index+Ajax+bootstrapData.json`,
+      `/game/${this.world}/index+Us+Game.json`,
+    ];
+    for (const ep of endpoints) {
+      try {
+        const res = await this.client.get(`${this.baseUrl}${ep}`, {
+          headers: { ...this._headers(`${this.baseUrl}/game/${this.world}`), "X-Requested-With": "XMLHttpRequest" },
+        });
+        const csrfMatch = JSON.stringify(res.data).match(/"csrf_token"\s*:\s*"([a-f0-9]{20,})"/);
+        if (csrfMatch) { this.csrfToken = csrfMatch[1]; logger.info(`CSRF gevonden via ${ep}`); return; }
+        const pidMatch = JSON.stringify(res.data).match(/"player_id"\s*:\s*(\d+)/);
+        if (pidMatch && !this.playerId) this.playerId = parseInt(pidMatch[1]);
+      } catch (_) {}
+    }
   }
 
   async ajax(action, townId, extraData = {}) {
