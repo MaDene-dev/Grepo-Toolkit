@@ -1,7 +1,11 @@
 const axios = require("axios");
 const { wrapper } = require("axios-cookiejar-support");
-const { CookieJar } = require("tough-cookie");
+const { CookieJar, Cookie } = require("tough-cookie");
+const fs = require("fs");
+const path = require("path");
 const logger = require("../utils/logger");
+
+const COOKIES_FILE = path.join(__dirname, "../../cookies.json");
 
 class Session {
   constructor(config) {
@@ -19,121 +23,121 @@ class Session {
     this.playerId = config.account.player_id || null;
     this.world = config.account.world;
     this.baseUrl = `https://${this.world}.grepolis.com`;
-
-    const langPrefix = this.world.match(/^([a-z]+)/)?.[1] ?? "en";
-    this.portal = `https://${langPrefix}-play.grepolis.com`;
-    logger.info(`Portal: ${this.portal}`);
   }
 
   async login() {
-    logger.info("Inloggen bij Grepolis (SPA/JSON mode)...");
+    logger.info("Sessie opzetten via cookies...");
 
-    // Stap 1: Probeer JSON API login (moderne InnoGames ONELPS aanpak)
-    const loginEndpoints = [
-      { url: `${this.portal}/api/v1/users/sign_in`,  body: { user: { login: this.config.account.username, password: this.config.account.password, uni_url: this.world } } },
-      { url: `${this.portal}/api/users/sign_in`,     body: { user: { login: this.config.account.username, password: this.config.account.password, uni_url: this.world } } },
-      { url: `${this.portal}/users/sign_in.json`,    body: { user: { login: this.config.account.username, password: this.config.account.password, uni_url: this.world } } },
-    ];
+    if (!fs.existsSync(COOKIES_FILE)) {
+      throw new Error(
+        "cookies.json niet gevonden! Exporteer je cookies via de Cookie-Editor extensie " +
+        "en plaats het bestand naast config.json. Zie README voor instructies."
+      );
+    }
 
-    let loggedIn = false;
-    for (const ep of loginEndpoints) {
+    // Laad cookies uit het bestand
+    const raw = JSON.parse(fs.readFileSync(COOKIES_FILE, "utf8"));
+    logger.info(`${raw.length} cookies geladen uit cookies.json`);
+
+    for (const c of raw) {
+      // Cookie-Editor exporteert naar dit formaat, we zetten het om naar tough-cookie
+      const domain = c.domain?.startsWith(".") ? c.domain : `.${c.domain ?? this.world + ".grepolis.com"}`;
       try {
-        logger.info(`Login proberen via: ${ep.url}`);
-        const res = await this.client.post(ep.url, ep.body, {
-          headers: {
-            ...this._headers(this.portal),
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-          },
+        const cookie = new Cookie({
+          key:      c.name,
+          value:    c.value,
+          domain:   domain.replace(/^\./, ""),
+          path:     c.path ?? "/",
+          secure:   c.secure ?? true,
+          httpOnly: c.httpOnly ?? false,
+          expires:  c.expirationDate ? new Date(c.expirationDate * 1000) : "Infinity",
         });
-        logger.info(`Status: ${res.status} | Response: ${JSON.stringify(res.data).substring(0, 200)}`);
+        await this.jar.setCookie(cookie, `https://${domain.replace(/^\./, "")}`);
+      } catch (_) {}
+    }
 
-        if (res.status === 200 || res.status === 201) {
-          // Haal token op uit response als die er in zit
-          if (res.data?.auth_token) this.csrfToken = res.data.auth_token;
-          if (res.data?.csrf_token) this.csrfToken = res.data.csrf_token;
-          if (res.data?.token)      this.csrfToken = res.data.token;
-          loggedIn = true;
-          logger.info(`Login gelukt via ${ep.url}`);
-          break;
-        }
-      } catch (err) {
-        logger.warn(`${ep.url} → ${err.message}`);
+    // Verifieer de sessie door de gamepagina te laden
+    logger.info("Sessie verifiëren...");
+    const res = await this.client.get(`${this.baseUrl}/game/${this.world}`, {
+      headers: this._headers(),
+    });
+
+    logger.info(`Game pagina status: ${res.status}, grootte: ${res.data.length} bytes`);
+
+    // Haal CSRF-token op — zit in de CDATA van de game pagina of in een cookie
+    this._extractCsrf(res.data);
+
+    // Probeer ook uit cookies
+    if (!this.csrfToken) {
+      const cookies = await this.jar.getCookies(this.baseUrl);
+      logger.info(`Game cookies: ${cookies.map(c => c.key).join(", ")}`);
+      const csrfCookie = cookies.find(c =>
+        c.key.toLowerCase().includes("csrf") ||
+        c.key.toLowerCase().includes("token") ||
+        c.key.toLowerCase().includes("authenticity")
+      );
+      if (csrfCookie) {
+        this.csrfToken = csrfCookie.value;
+        logger.info(`CSRF uit cookie: ${csrfCookie.key}`);
       }
     }
 
-    // Stap 2: Navigeer naar de game-wereld om game-cookies te krijgen
-    logger.info("Navigeren naar game-wereld...");
-    const worldUrls = [
-      `${this.portal}/play/${this.world}`,
-      `${this.baseUrl}/game/${this.world}`,
-    ];
-    for (const url of worldUrls) {
-      try {
-        const res = await this.client.get(url, { headers: this._headers(this.portal) });
-        logger.info(`GET ${url} → status ${res.status}, size ${res.data.length}`);
-        this._tryExtractCsrf(res.data);
-        if (this.csrfToken) break;
-      } catch (err) {
-        logger.warn(`${url} → ${err.message}`);
-      }
-    }
-
-    // Stap 3: Log alle cookies zodat we kunnen debuggen
-    const cookies = await this.jar.getCookies(this.baseUrl);
-    logger.info(`Cookies op ${this.baseUrl}: ${cookies.map(c => c.key).join(", ") || "geen"}`);
-
-    const portalCookies = await this.jar.getCookies(this.portal);
-    logger.info(`Cookies op portal: ${portalCookies.map(c => c.key).join(", ") || "geen"}`);
-
-    // Stap 4: Probeer CSRF via directe game API endpoints
+    // Probeer via een lichte AJAX-call de game data op te halen
     if (!this.csrfToken) {
-      await this._tryGameApiEndpoints();
+      await this._fetchCsrfViaAjax();
     }
-
-    logger.info(`player_id: ${this.playerId ?? "onbekend"}`);
-    logger.info(`csrf_token: ${this.csrfToken ? "gevonden ✓" : "niet gevonden ✗"}`);
 
     if (!this.csrfToken) {
-      throw new Error("Kon geen CSRF-token ophalen. Zie logs hierboven voor details.");
+      // Log de eerste 2000 tekens voor diagnose
+      logger.error("Pagina-inhoud (eerste 2000 tekens):\n" + res.data.substring(0, 2000));
+      throw new Error(
+        "Kon geen CSRF-token vinden. Mogelijk zijn je cookies verlopen — exporteer ze opnieuw."
+      );
     }
 
-    logger.info("Sessie succesvol opgezet.");
+    logger.info(`✓ Sessie OK | player_id: ${this.playerId} | csrf: gevonden`);
   }
 
-  async _tryGameApiEndpoints() {
+  _extractCsrf(html) {
+    const patterns = [
+      /["']csrf_token["']\s*[:=]\s*["']([a-zA-Z0-9_\-]{10,})["']/,
+      /<meta[^>]+name=["']csrf-token["'][^>]+content=["']([^"']+)["']/,
+      /csrf_token\s*=\s*"([a-zA-Z0-9_\-]{10,})"/,
+      /"h"\s*:\s*"([a-zA-Z0-9_\-]{10,})"/,
+    ];
+    for (const pat of patterns) {
+      const m = html.match(pat);
+      if (m) { this.csrfToken = m[1]; logger.info(`CSRF gevonden via regex`); return; }
+    }
+
+    // Zoek ook player_id als we die nog niet hebben
+    if (!this.playerId) {
+      const pidMatch = html.match(/["']?player_id["']?\s*[:=]\s*(\d+)/);
+      if (pidMatch) this.playerId = parseInt(pidMatch[1]);
+    }
+  }
+
+  async _fetchCsrfViaAjax() {
+    // Grepolis game data wordt opgehaald via deze endpoint
     const endpoints = [
       `/game/${this.world}/index+Ajax+bootstrapData.json`,
+      `/game/${this.world}/index+Us+GrepolisData.json`,
       `/game/${this.world}/index+Us+Game.json`,
-      `/game/${this.world}?format=json`,
     ];
     for (const ep of endpoints) {
       try {
         const res = await this.client.get(`${this.baseUrl}${ep}`, {
-          headers: { ...this._headers(`${this.baseUrl}/game/${this.world}`), "X-Requested-With": "XMLHttpRequest", Accept: "application/json" },
+          headers: { ...this._headers(), "X-Requested-With": "XMLHttpRequest", Accept: "application/json" },
         });
-        logger.info(`API ${ep} → status ${res.status}`);
-        const raw = typeof res.data === "string" ? res.data : JSON.stringify(res.data);
-        this._tryExtractCsrf(raw);
-        const pidMatch = raw.match(/"player_id"\s*:\s*(\d+)/);
-        if (pidMatch && !this.playerId) this.playerId = parseInt(pidMatch[1]);
-        if (this.csrfToken) { logger.info(`CSRF gevonden via ${ep}`); return; }
+        if (res.status === 200) {
+          const raw = typeof res.data === "string" ? res.data : JSON.stringify(res.data);
+          logger.info(`${ep} → ${raw.substring(0, 150)}`);
+          this._extractCsrf(raw);
+          if (this.csrfToken) return;
+        }
       } catch (err) {
-        logger.warn(`${ep} → ${err.message}`);
+        logger.warn(`${ep}: ${err.message}`);
       }
-    }
-  }
-
-  _tryExtractCsrf(html) {
-    const patterns = [
-      /["']csrf_token["']\s*[:=]\s*["']([a-f0-9]{20,})["']/,
-      /"csrf_token"\s*:\s*"([a-f0-9]{20,})"/,
-      /<meta[^>]+name=["']csrf-token["'][^>]+content=["']([^"']+)["']/,
-      /csrf_token\s*=\s*"([a-f0-9]{20,})"/,
-    ];
-    for (const pat of patterns) {
-      const m = html.match(pat);
-      if (m) { this.csrfToken = m[1]; return; }
     }
   }
 
@@ -143,17 +147,17 @@ class Session {
     const res = await this.client.post(
       `${this.baseUrl}/game/${this.world}/frontend_bridge.php`,
       payload.toString(),
-      { headers: { ...this._headers(`${this.baseUrl}/game/${this.world}`), "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "X-Requested-With": "XMLHttpRequest" } }
+      { headers: { ...this._headers(), "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "X-Requested-With": "XMLHttpRequest" } }
     );
     return res.data;
   }
 
-  _headers(referer) {
+  _headers() {
     return {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
       "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       "Accept-Language": "nl-BE,nl;q=0.9,en;q=0.7",
-      "Referer": referer,
+      "Referer": `${this.baseUrl}/game/${this.world}`,
     };
   }
 }
