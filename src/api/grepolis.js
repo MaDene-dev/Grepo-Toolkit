@@ -5,65 +5,84 @@ class GrepolisAPI {
     this.session = session;
   }
 
+  // Steden ophalen uit de game HTML (zoekt naar town_id en island coords)
   async getTowns() {
-    // Grepolis vereist player_id in de payload voor town-gerelateerde calls
-    const playerId = this.session.playerId;
-    const toTry = [
-      { action: "getTowns",            extra: { player_id: playerId } },
-      { action: "fetchTowns",          extra: { player_id: playerId } },
-      { action: "getTownsForPlayer",   extra: { player_id: playerId } },
-      { action: "fetchTownsForPlayer", extra: { player_id: playerId } },
-      { action: "getTowns",            extra: { } },
-    ];
+    const html = this.session.lastHtml;
 
-    for (const { action, extra } of toTry) {
-      try {
-        const data = await this.session.ajax(action, 0, extra);
-        const unwrapped = data?.json ?? data;
-        const raw = JSON.stringify(unwrapped).substring(0, 300);
-        logger.info(`[API] ${action}: ${raw}`);
-
-        if (unwrapped?.towns) {
-          const towns = Object.values(unwrapped.towns);
-          if (towns.length > 0) {
-            logger.info(`[API] ${towns.length} steden gevonden via "${action}"`);
-            return towns;
-          }
-        }
-        if (unwrapped?.error) {
-          logger.warn(`[API] ${action} fout: ${unwrapped.error}`);
-        }
-      } catch (err) {
-        logger.warn(`[API] ${action} exception: ${err.message}`);
-      }
+    // Zoek alle town-blokken in de HTML
+    // Grepolis stopt town-data in de vorm: {"id":3323,"name":"...","island_x":464,"island_y":455,...}
+    const towns = [];
+    const pattern = /\{"id"\s*:\s*(\d+)\s*,\s*"name"\s*:\s*"([^"]+)"[^}]*"island_x"\s*:\s*(\d+)[^}]*"island_y"\s*:\s*(\d+)/g;
+    let match;
+    while ((match = pattern.exec(html)) !== null) {
+      towns.push({
+        id:       parseInt(match[1]),
+        name:     match[2],
+        island_x: parseInt(match[3]),
+        island_y: parseInt(match[4]),
+      });
     }
 
-    // Laatste kans: probeer via player_id in de town_id positie
-    try {
-      const data = await this.session.ajax("getTowns", playerId);
-      const unwrapped = data?.json ?? data;
-      logger.info(`[API] getTowns(town_id=player_id): ${JSON.stringify(unwrapped).substring(0, 300)}`);
-      if (unwrapped?.towns) return Object.values(unwrapped.towns);
-    } catch (err) {
-      logger.warn(`[API] Laatste poging mislukt: ${err.message}`);
+    if (towns.length > 0) {
+      logger.info(`[API] ${towns.length} steden gevonden in HTML`);
+      return towns;
     }
 
-    throw new Error("Kon steden niet ophalen — zie logs.");
+    // Fallback: gebruik steden uit config als ze ingesteld zijn
+    if (this.session.config.account.towns?.length > 0) {
+      logger.info(`[API] Steden uit config gebruikt`);
+      return this.session.config.account.towns;
+    }
+
+    // Log stuk HTML om te helpen debuggen
+    logger.warn("[API] Geen steden gevonden in HTML, zoeken naar 'island_x'...");
+    const idx = html.indexOf("island_x");
+    if (idx !== -1) {
+      logger.info(`[API] island_x context: ${html.substring(Math.max(0, idx-100), idx+200)}`);
+    } else {
+      logger.warn("[API] 'island_x' niet gevonden in HTML");
+    }
+
+    throw new Error(
+      "Geen steden gevonden. Voeg ze handmatig toe aan config.json (zie README)."
+    );
   }
 
-  async getFarmingVillages(townId) {
-    const data = await this.session.ajax("fetchFarmTowns", townId);
-    const unwrapped = data?.json ?? data;
-    logger.info(`[API] getFarmingVillages(${townId}): ${JSON.stringify(unwrapped).substring(0, 300)}`);
+  // Farming villages ophalen voor een stad
+  // Echte endpoint: GET /game/farm_town_overviews?action=get_farm_towns_for_town
+  async getFarmingVillages(town) {
+    const jsonPayload = JSON.stringify({
+      island_x:             town.island_x,
+      island_y:             town.island_y,
+      booty_researched:     "",
+      trade_office:         0,
+      diplomacy_researched: "",
+      town_id:              town.id,
+      nl_init:              true,
+    });
 
-    if (unwrapped?.farm_towns) return Object.values(unwrapped.farm_towns);
+    const data = await this.session.gameGet("farm_town_overviews", town.id, "get_farm_towns_for_town", jsonPayload);
+
+    if (data?.farm_towns) {
+      return Object.values(data.farm_towns);
+    }
+    if (data?.error) {
+      logger.warn(`[API] getFarmingVillages fout: ${data.error}`);
+    }
+    logger.info(`[API] getFarmingVillages response: ${JSON.stringify(data).substring(0, 300)}`);
     return [];
   }
 
-  async farmVillage(townId, farmTownId, mode = "loot") {
-    const action = mode === "demand" ? "farmTownDemand" : "farmTownLoot";
-    const data = await this.session.ajax(action, townId, { farm_town_id: farmTownId });
-    return data?.json ?? data;
+  // Alle beschikbare grondstoffen opeisen voor een stad
+  // Echte endpoint: GET /game/farm_town_overviews?action=claim_loads
+  async claimLoads(townId) {
+    const data = await this.session.gameGet("farm_town_overviews", townId, "claim_loads");
+    const result = data?.json ?? data;
+    if (result?.error) {
+      logger.warn(`[API] claimLoads fout: ${result.error}`);
+      return false;
+    }
+    return true;
   }
 }
 
