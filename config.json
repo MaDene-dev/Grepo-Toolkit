@@ -1,0 +1,14 @@
+{
+  "account": {
+    "username": "Marcotics",
+    "password": "grotesmurf",
+    "world": "nl132"
+  },
+  "autofarm": {
+    "enabled": true,
+    "mode": "loot",
+    "interval_minutes": 30,
+    "randomize_interval": true,
+    "randomize_range_minutes": 5
+  }
+}
