@@ -5,44 +5,72 @@ class GrepolisAPI {
     this.session = session;
   }
 
-  // Haalt alle steden op van de ingelogde speler
   async getTowns() {
-    const data = await this.session.ajax("getTowns", 0, {
-      nl_init: 1,
-      device: "desktop",
-    });
+    // Probeer meerdere bekende actienamen voor het ophalen van steden
+    const actions = ["getTowns", "fetchTowns", "loadTowns", "GameDataModel"];
 
-    if (!data || !data.towns) {
-      throw new Error("Kon steden niet ophalen. Sessie verlopen?");
+    for (const action of actions) {
+      try {
+        logger.info(`[API] getTowns proberen via actie: "${action}"`);
+        const data = await this.session.ajax(action, 0);
+        const raw = JSON.stringify(data).substring(0, 300);
+        logger.info(`[API] Response (${action}): ${raw}`);
+
+        // Controleer of het een bruikbare response is
+        if (data && data.towns) {
+          const towns = Object.values(data.towns);
+          logger.info(`[API] ${towns.length} steden gevonden via "${action}"`);
+          return towns;
+        }
+
+        if (data && data.error) {
+          logger.warn(`[API] Fout van server (${action}): ${data.error}`);
+        }
+      } catch (err) {
+        logger.warn(`[API] "${action}" mislukt: ${err.message}`);
+      }
     }
 
-    const towns = Object.values(data.towns);
-    logger.info(`${towns.length} stad/steden gevonden.`);
-    return towns;
+    // Als geen enkele actie werkt, probeer via de game-data URL direct
+    logger.info("[API] Probeer steden ophalen via game-data URL...");
+    try {
+      const data = await this.session.getJson(
+        `/game/${this.session.world}/index+Us+ITowns.json`
+      );
+      const raw = JSON.stringify(data).substring(0, 300);
+      logger.info(`[API] ITowns response: ${raw}`);
+
+      if (data && data.towns) {
+        return Object.values(data.towns);
+      }
+      if (Array.isArray(data)) return data;
+    } catch (err) {
+      logger.warn(`[API] ITowns URL mislukt: ${err.message}`);
+    }
+
+    throw new Error("Kon steden niet ophalen — zie logs voor details.");
   }
 
-  // Haalt de farming villages op voor een specifieke stad
   async getFarmingVillages(townId) {
-    const data = await this.session.ajax("fetchFarmTowns", townId);
-
-    if (!data || !data.farm_towns) return [];
-
-    return Object.values(data.farm_towns);
+    const actions = ["fetchFarmTowns", "getFarmTowns", "farmTowns"];
+    for (const action of actions) {
+      try {
+        const data = await this.session.ajax(action, townId);
+        if (data && data.farm_towns) return Object.values(data.farm_towns);
+        if (data && !data.error) {
+          logger.info(`[API] getFarmingVillages (${action}) response: ${JSON.stringify(data).substring(0, 200)}`);
+        }
+      } catch (err) {
+        logger.warn(`[API] "${action}" voor town ${townId}: ${err.message}`);
+      }
+    }
+    return [];
   }
 
-  // Stuurt een farm-actie naar een boerendorp (demand of loot)
   async farmVillage(townId, farmTownId, mode = "loot") {
-    const actionMap = {
-      loot:   "farmTownLoot",
-      demand: "farmTownDemand",
-    };
-
+    const actionMap = { loot: "farmTownLoot", demand: "farmTownDemand" };
     const action = actionMap[mode] || "farmTownLoot";
-
-    const data = await this.session.ajax(action, townId, {
-      farm_town_id: farmTownId,
-    });
-
+    const data = await this.session.ajax(action, townId, { farm_town_id: farmTownId });
     return data;
   }
 }
