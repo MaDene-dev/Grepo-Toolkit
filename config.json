@@ -1,0 +1,96 @@
+{
+  "account": {
+    "world": "nl132",
+    "player_id": 1361000,
+    "towns": [
+      {
+        "id": 3323,
+        "name": "Marcotics",
+        "island_x": 464,
+        "island_y": 455
+      }
+    ]
+  },
+  "schedule": {
+    "enabled": true,
+    "active_hours": { "start": 7, "end": 23 },
+    "report_every_n_runs": 10,
+
+    "time_options": {
+      "short":  { "seconds": 600,   "label": "10 min" },
+      "medium": { "seconds": 2400,  "label": "40 min" },
+      "long":   { "seconds": 10800, "label": "3u"     },
+      "night":  { "seconds": 28800, "label": "8u"     }
+    },
+
+    "slots": [
+      {
+        "hour_start": 7, "hour_end": 9,
+        "comment": "Ochtend opstarten — korte sessies",
+        "options": [
+          { "time_option": 600,   "weight": 70 },
+          { "time_option": 2400,  "weight": 30 }
+        ],
+        "interval_minutes": 11,
+        "jitter_minutes": 3
+      },
+      {
+        "hour_start": 9, "hour_end": 12,
+        "comment": "Voormiddag — mix kort/medium",
+        "options": [
+          { "time_option": 600,   "weight": 50 },
+          { "time_option": 2400,  "weight": 50 }
+        ],
+        "interval_minutes": 18,
+        "jitter_minutes": 5
+      },
+      {
+        "hour_start": 12, "hour_end": 14,
+        "comment": "Middag — even ruimer",
+        "options": [
+          { "time_option": 600,   "weight": 30 },
+          { "time_option": 2400,  "weight": 50 },
+          { "time_option": 10800, "weight": 20 }
+        ],
+        "interval_minutes": 25,
+        "jitter_minutes": 7
+      },
+      {
+        "hour_start": 14, "hour_end": 18,
+        "comment": "Namiddag — actief",
+        "options": [
+          { "time_option": 600,   "weight": 60 },
+          { "time_option": 2400,  "weight": 40 }
+        ],
+        "interval_minutes": 13,
+        "jitter_minutes": 4
+      },
+      {
+        "hour_start": 18, "hour_end": 21,
+        "comment": "Avond — rustiger",
+        "options": [
+          { "time_option": 2400,  "weight": 40 },
+          { "time_option": 10800, "weight": 60 }
+        ],
+        "interval_minutes": 45,
+        "jitter_minutes": 12
+      },
+      {
+        "hour_start": 21, "hour_end": 23,
+        "comment": "Late avond — voor het slapen",
+        "options": [
+          { "time_option": 10800, "weight": 30 },
+          { "time_option": 28800, "weight": 70 }
+        ],
+        "interval_minutes": 90,
+        "jitter_minutes": 20
+      }
+    ]
+  },
+  "email": {
+    "enabled": true,
+    "to": "JOUW_EMAIL",
+    "smtp_host": "smtp.gmail.com",
+    "smtp_port": 587
+  }
+}
