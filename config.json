@@ -2,7 +2,8 @@
   "account": {
     "username": "marvin.deneut@gmail.com",
     "password": "grotesmurf",
-    "world": "nl132"
+    "world": "nl132",
+    "player_id": 1361000
   },
   "autofarm": {
     "enabled": true,
