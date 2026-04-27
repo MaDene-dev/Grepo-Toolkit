@@ -6,7 +6,6 @@ class Autofarm {
     this.config = config.autofarm;
     this.running = false;
     this.timer = null;
-    this.lastFarmed = {}; // { townId: timestamp }
   }
 
   start() {
@@ -42,13 +41,12 @@ class Autofarm {
 
     try {
       const towns = await this.api.getTowns();
-
       for (const town of towns) {
         await this._farmTown(town);
         await this._sleep(2000 + Math.random() * 2000);
       }
     } catch (err) {
-      logger.error(`[Autofarm] Fout tijdens farm-ronde: ${err.message}`);
+      logger.error(`[Autofarm] Fout: ${err.message}`);
     }
 
     logger.info("[Autofarm] === Farm-ronde afgerond ===");
@@ -56,55 +54,30 @@ class Autofarm {
   }
 
   async _farmTown(town) {
-    logger.info(`[Autofarm] Stad: ${town.name} (id: ${town.id}, eiland: ${town.island_x},${town.island_y})`);
+    logger.info(`[Autofarm] Stad: ${town.name} (id: ${town.id})`);
 
     try {
-      // Stap 1: Haal farming villages op
-      logger.info(`[Autofarm]   Farming villages ophalen...`);
-      const villages = await this.api.getFarmingVillages(town);
-      logger.info(`[Autofarm]   Gevonden: ${villages.length} dorpen`);
+      // Stap 1: Controleer of er grondstoffen beschikbaar zijn
+      const beschikbaar = await this.api.checkLoadsAvailable(town);
 
-      if (!villages.length) {
-        logger.info(`[Autofarm]   Geen farming villages beschikbaar.`);
-        return;
-      }
-
-      // Log eerste dorp zodat we de datastructuur zien
-      logger.info(`[Autofarm]   Voorbeeld dorp: ${JSON.stringify(villages[0]).substring(0, 200)}`);
-
-      const beschikbaar = villages.filter(v => this._isAvailable(v));
-      logger.info(`[Autofarm]   ${beschikbaar.length} van ${villages.length} beschikbaar.`);
-
-      if (beschikbaar.length === 0) {
-        logger.info(`[Autofarm]   Alles in cooldown.`);
+      if (!beschikbaar) {
+        logger.info(`[Autofarm]   Niets te halen, alles in cooldown.`);
         return;
       }
 
       // Stap 2: Claim alle beschikbare grondstoffen
-      logger.info(`[Autofarm]   claim_loads uitvoeren...`);
+      logger.info(`[Autofarm]   Grondstoffen opeisen...`);
+      await this._sleep(500 + Math.random() * 1000);
       const succes = await this.api.claimLoads(town.id);
+
       if (succes) {
-        this.lastFarmed[town.id] = Date.now();
-        logger.info(`[Autofarm]   ✓ Gefarmd! ${beschikbaar.length} dorpen.`);
+        logger.info(`[Autofarm]   ✓ Grondstoffen opgehaald voor ${town.name}!`);
       } else {
-        logger.warn(`[Autofarm]   claim_loads mislukt voor ${town.name}.`);
+        logger.warn(`[Autofarm]   Ophalen mislukt voor ${town.name}.`);
       }
     } catch (err) {
       logger.error(`[Autofarm]   Fout bij ${town.name}: ${err.message}`);
-      logger.error(err.stack);
     }
-  }
-
-  // Controleer of een dorp beschikbaar is (cooldown voorbij)
-  _isAvailable(village) {
-    if (village.looting_cooldown_end_at) {
-      return Date.now() / 1000 > village.looting_cooldown_end_at;
-    }
-    if (village.available_at) {
-      return Date.now() / 1000 > village.available_at;
-    }
-    // Als geen cooldown-veld: beschikbaar
-    return true;
   }
 
   _sleep(ms) {
