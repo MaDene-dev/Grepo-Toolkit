@@ -141,3 +141,15 @@ class Session {
 }
 
 module.exports = Session;
+
+// Wordt achteraf toegevoegd aan de klasse via prototype
+Session.prototype.getJson = async function(path) {
+  const res = await this.client.get(`${this.baseUrl}${path}`, {
+    headers: {
+      ...this._headers(),
+      "X-Requested-With": "XMLHttpRequest",
+      "Accept": "application/json, text/javascript, */*",
+    },
+  });
+  return res.data;
+};
