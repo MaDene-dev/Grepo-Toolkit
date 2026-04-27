@@ -29,121 +29,88 @@ class Session {
     logger.info("Sessie opzetten via cookies...");
 
     if (!fs.existsSync(COOKIES_FILE)) {
-      throw new Error(
-        "cookies.json niet gevonden! Exporteer je cookies via de Cookie-Editor extensie " +
-        "en plaats het bestand naast config.json. Zie README voor instructies."
-      );
+      throw new Error("cookies.json niet gevonden! Zie README voor instructies.");
     }
 
-    // Laad cookies uit het bestand
     const raw = JSON.parse(fs.readFileSync(COOKIES_FILE, "utf8"));
     logger.info(`${raw.length} cookies geladen uit cookies.json`);
 
     for (const c of raw) {
-      // Cookie-Editor exporteert naar dit formaat, we zetten het om naar tough-cookie
-      const domain = c.domain?.startsWith(".") ? c.domain : `.${c.domain ?? this.world + ".grepolis.com"}`;
+      const domain = (c.domain ?? `${this.world}.grepolis.com`).replace(/^\./, "");
       try {
         const cookie = new Cookie({
           key:      c.name,
           value:    c.value,
-          domain:   domain.replace(/^\./, ""),
+          domain:   domain,
           path:     c.path ?? "/",
           secure:   c.secure ?? true,
           httpOnly: c.httpOnly ?? false,
           expires:  c.expirationDate ? new Date(c.expirationDate * 1000) : "Infinity",
         });
-        await this.jar.setCookie(cookie, `https://${domain.replace(/^\./, "")}`);
+        await this.jar.setCookie(cookie, `https://${domain}`);
       } catch (_) {}
     }
 
-    // Verifieer de sessie door de gamepagina te laden
-    logger.info("Sessie verifiëren...");
+    // Laad de gamepagina — we zijn al ingelogd via cookies
+    logger.info("Gamepagina laden...");
     const res = await this.client.get(`${this.baseUrl}/game/${this.world}`, {
       headers: this._headers(),
     });
 
-    logger.info(`Game pagina status: ${res.status}, grootte: ${res.data.length} bytes`);
+    logger.info(`Status: ${res.status} | Grootte: ${res.data.length} bytes`);
 
-    // Haal CSRF-token op — zit in de CDATA van de game pagina of in een cookie
-    this._extractCsrf(res.data);
+    // Log een groot stuk zodat we exact zien hoe de token erin staat
+    const chunk = res.data.substring(0, 4000);
+    logger.info("=== BEGIN PAGINA ===\n" + chunk + "\n=== EINDE ===");
 
-    // Probeer ook uit cookies
-    if (!this.csrfToken) {
-      const cookies = await this.jar.getCookies(this.baseUrl);
-      logger.info(`Game cookies: ${cookies.map(c => c.key).join(", ")}`);
-      const csrfCookie = cookies.find(c =>
-        c.key.toLowerCase().includes("csrf") ||
-        c.key.toLowerCase().includes("token") ||
-        c.key.toLowerCase().includes("authenticity")
-      );
-      if (csrfCookie) {
-        this.csrfToken = csrfCookie.value;
-        logger.info(`CSRF uit cookie: ${csrfCookie.key}`);
-      }
-    }
-
-    // Probeer via een lichte AJAX-call de game data op te halen
-    if (!this.csrfToken) {
-      await this._fetchCsrfViaAjax();
-    }
+    // Zoek CSRF op alle bekende manieren
+    this._extractAll(res.data);
 
     if (!this.csrfToken) {
-      // Log de eerste 2000 tekens voor diagnose
-      logger.error("Pagina-inhoud (eerste 2000 tekens):\n" + res.data.substring(0, 2000));
-      throw new Error(
-        "Kon geen CSRF-token vinden. Mogelijk zijn je cookies verlopen — exporteer ze opnieuw."
-      );
+      throw new Error("Geen CSRF-token gevonden. Bekijk de logs hierboven voor de paginainhoud.");
     }
 
-    logger.info(`✓ Sessie OK | player_id: ${this.playerId} | csrf: gevonden`);
+    logger.info(`✓ Sessie OK | player_id: ${this.playerId} | csrf: ${this.csrfToken.substring(0,8)}...`);
   }
 
-  _extractCsrf(html) {
+  _extractAll(html) {
+    // Grepolis stopt speldata in een Game={...} object — token heet 'csrf_token' of 'csrfToken'
     const patterns = [
-      /["']csrf_token["']\s*[:=]\s*["']([a-zA-Z0-9_\-]{10,})["']/,
-      /<meta[^>]+name=["']csrf-token["'][^>]+content=["']([^"']+)["']/,
-      /csrf_token\s*=\s*"([a-zA-Z0-9_\-]{10,})"/,
-      /"h"\s*:\s*"([a-zA-Z0-9_\-]{10,})"/,
+      // Game object patronen
+      /['"](csrf_token|csrfToken)['"]\s*:\s*['"]([a-zA-Z0-9_\-]{8,})['"]/, // index 2
+      /csrf_token\s*=\s*['"]([a-zA-Z0-9_\-]{8,})['"]/,                     // index 1
+      /csrfToken\s*[:=]\s*['"]([a-zA-Z0-9_\-]{8,})['"]/,                   // index 1
+      // "h" is de naam van de CSRF param in Grepolis API calls
+      /['"](h)['"]\s*:\s*['"]([a-zA-Z0-9_\-]{8,})['"]/,                    // index 2
+      // Meta tag
+      /<meta[^>]+name=["']csrf-token["'][^>]+content=["']([^"']+)["']/,     // index 1
     ];
+
     for (const pat of patterns) {
       const m = html.match(pat);
-      if (m) { this.csrfToken = m[1]; logger.info(`CSRF gevonden via regex`); return; }
-    }
-
-    // Zoek ook player_id als we die nog niet hebben
-    if (!this.playerId) {
-      const pidMatch = html.match(/["']?player_id["']?\s*[:=]\s*(\d+)/);
-      if (pidMatch) this.playerId = parseInt(pidMatch[1]);
-    }
-  }
-
-  async _fetchCsrfViaAjax() {
-    // Grepolis game data wordt opgehaald via deze endpoint
-    const endpoints = [
-      `/game/${this.world}/index+Ajax+bootstrapData.json`,
-      `/game/${this.world}/index+Us+GrepolisData.json`,
-      `/game/${this.world}/index+Us+Game.json`,
-    ];
-    for (const ep of endpoints) {
-      try {
-        const res = await this.client.get(`${this.baseUrl}${ep}`, {
-          headers: { ...this._headers(), "X-Requested-With": "XMLHttpRequest", Accept: "application/json" },
-        });
-        if (res.status === 200) {
-          const raw = typeof res.data === "string" ? res.data : JSON.stringify(res.data);
-          logger.info(`${ep} → ${raw.substring(0, 150)}`);
-          this._extractCsrf(raw);
-          if (this.csrfToken) return;
+      if (m) {
+        // Sommige patronen hebben de waarde op index 1, andere op index 2
+        const val = m[2] ?? m[1];
+        if (val && val.length >= 8) {
+          this.csrfToken = val;
+          logger.info(`CSRF gevonden: patroon "${pat.source.substring(0,40)}..."`);
+          return;
         }
-      } catch (err) {
-        logger.warn(`${ep}: ${err.message}`);
       }
+    }
+
+    // player_id ophalen als fallback
+    if (!this.playerId) {
+      const pid = html.match(/['"](player_id)['"]\s*:\s*(\d+)/);
+      if (pid) this.playerId = parseInt(pid[2]);
     }
   }
 
   async ajax(action, townId, extraData = {}) {
     if (!this.csrfToken) throw new Error("Geen actieve sessie.");
-    const payload = new URLSearchParams({ town_id: townId, action_name: action, ...extraData, h: this.csrfToken });
+    const payload = new URLSearchParams({
+      town_id: townId, action_name: action, ...extraData, h: this.csrfToken,
+    });
     const res = await this.client.post(
       `${this.baseUrl}/game/${this.world}/frontend_bridge.php`,
       payload.toString(),
