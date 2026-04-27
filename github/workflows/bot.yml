@@ -2,9 +2,8 @@ name: Grepolis Bot
 
 on:
   schedule:
-    # Start elke 50 minuten (GitHub Actions heeft max ~6u runtime)
     - cron: "*/50 * * * *"
-  workflow_dispatch: # Handmatig starten via GitHub UI
+  workflow_dispatch:
 
 jobs:
   run-bot:
@@ -23,6 +22,9 @@ jobs:
 
       - name: Dependencies installeren
         run: npm ci --omit=dev
+
+      - name: Cookies wegschrijven
+        run: echo '${{ secrets.GREPO_COOKIES }}' > cookies.json
 
       - name: Bot starten
         env:
