@@ -1,18 +1,5 @@
 [
     {
-        "domain": ".grepolis.com",
-        "expirationDate": 1777287629,
-        "hostOnly": false,
-        "httpOnly": false,
-        "name": "portal_tid",
-        "path": "/",
-        "sameSite": "no_restriction",
-        "secure": true,
-        "session": false,
-        "storeId": null,
-        "value": "1776675629061-13460"
-    },
-    {
         "domain": "nl132.grepolis.com",
         "expirationDate": 1779264794.238991,
         "hostOnly": true,
@@ -52,7 +39,7 @@
     },
     {
         "domain": ".grepolis.com",
-        "expirationDate": 1811844289.866776,
+        "expirationDate": 1811875079.963379,
         "hostOnly": false,
         "httpOnly": true,
         "name": "nl-interop-rememberme",
@@ -61,11 +48,11 @@
         "secure": true,
         "session": false,
         "storeId": null,
-        "value": "eyJzIjoiNWJWUm94Vm1DYW9EbjU3YVlvNVVwU2xDQWNydG1HUjRQdEl2WHVER3hNUlFidmY5VHk3SWNvbUJmbUZHK0UyOGZNcCtQQ1I2NnlFdzJFWmRmVUtWNkE9PSIsImgiOiI0VXF5TkZhd1ZSL01sRVN6L3ZIdnVjY05UUi83SmhRSGlzak9YSXVLN2VQZy9HblJ2dEpLQU5iOHZXK2QrMnJGZExnMGhGeStGSlROTXQ1U1Q4QjZFZz09In0="
+        "value": "eyJzIjoiNWJWUm94Vm1DYW9EbjU3YVlvNVVwU2xDQWNydG1HUjRQdEl2WHVER3hNUlFidmY5VHk3SWNvbUJmbUZHK0UyOGZNcCtQQ1I2NnlFdzJFWmRmVUtWNkE9PSIsImgiOiI2VFgyOVBzaGJ0QXFObGdJZUJ3NWh3TXgxN2kwejM4SjROejdhdkdHL1pFWm9DZmRrNXlRSEV1RS9qWlYyakZZY0RENWtUaGdXRmV0bGF6Rm9sU2tyZz09In0="
     },
     {
         "domain": "nl132.grepolis.com",
-        "expirationDate": 1808822153.400886,
+        "expirationDate": 1808851082.031561,
         "hostOnly": true,
         "httpOnly": true,
         "name": "sid",
@@ -74,7 +61,7 @@
         "secure": true,
         "session": false,
         "storeId": null,
-        "value": "88s888kg044w0wogc4ogw0oowg0840csw488sc8gs0wkos8ccoco0ckkk0kc8c8g"
+        "value": "gw4cwso0woggsgg4cw0oowggwkww4c84k88cc44o8csgogk8oo004wks8o8gg8c4"
     },
     {
         "domain": ".grepolis.com",
@@ -130,7 +117,7 @@
     },
     {
         "domain": ".grepolis.com",
-        "expirationDate": 1808822153,
+        "expirationDate": 1808851082,
         "hostOnly": false,
         "httpOnly": false,
         "name": "ig_conv_last_site",
