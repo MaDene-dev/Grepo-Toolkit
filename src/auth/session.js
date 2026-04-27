@@ -51,58 +51,63 @@ class Session {
       } catch (_) {}
     }
 
-    // Laad de gamepagina — we zijn al ingelogd via cookies
     logger.info("Gamepagina laden...");
     const res = await this.client.get(`${this.baseUrl}/game/${this.world}`, {
       headers: this._headers(),
     });
-
     logger.info(`Status: ${res.status} | Grootte: ${res.data.length} bytes`);
 
-    // Log een groot stuk zodat we exact zien hoe de token erin staat
-    const chunk = res.data.substring(0, 4000);
-    logger.info("=== BEGIN PAGINA ===\n" + chunk + "\n=== EINDE ===");
+    const html = res.data;
 
-    // Zoek CSRF op alle bekende manieren
-    this._extractAll(res.data);
-
-    if (!this.csrfToken) {
-      throw new Error("Geen CSRF-token gevonden. Bekijk de logs hierboven voor de paginainhoud.");
+    // Zoek en log de context rondom bekende sleutelwoorden
+    const keywords = ["csrf_token", "csrfToken", "csrf", '"h":', "GrepolisData", "bootstrap", "var Game"];
+    for (const kw of keywords) {
+      const idx = html.indexOf(kw);
+      if (idx !== -1) {
+        const snippet = html.substring(Math.max(0, idx - 30), idx + 200);
+        logger.info(`Gevonden [${kw}] op positie ${idx}:\n  ...${snippet}...`);
+      } else {
+        logger.info(`Niet gevonden: [${kw}]`);
+      }
     }
 
-    logger.info(`✓ Sessie OK | player_id: ${this.playerId} | csrf: ${this.csrfToken.substring(0,8)}...`);
+    // Probeer alle patronen
+    this._extractAll(html);
+
+    if (!this.csrfToken) {
+      throw new Error("Geen CSRF-token gevonden. Bekijk de snippets hierboven.");
+    }
+
+    logger.info(`✓ Sessie OK | player_id: ${this.playerId} | csrf: ${this.csrfToken.substring(0, 8)}...`);
   }
 
   _extractAll(html) {
-    // Grepolis stopt speldata in een Game={...} object — token heet 'csrf_token' of 'csrfToken'
     const patterns = [
-      // Game object patronen
-      /['"](csrf_token|csrfToken)['"]\s*:\s*['"]([a-zA-Z0-9_\-]{8,})['"]/, // index 2
-      /csrf_token\s*=\s*['"]([a-zA-Z0-9_\-]{8,})['"]/,                     // index 1
-      /csrfToken\s*[:=]\s*['"]([a-zA-Z0-9_\-]{8,})['"]/,                   // index 1
-      // "h" is de naam van de CSRF param in Grepolis API calls
-      /['"](h)['"]\s*:\s*['"]([a-zA-Z0-9_\-]{8,})['"]/,                    // index 2
+      // Standaard JSON object patronen
+      /"csrf_token"\s*:\s*"([^"]{8,})"/,
+      /"csrfToken"\s*:\s*"([^"]{8,})"/,
+      /csrf_token\s*=\s*'([^']{8,})'/,
+      /csrf_token\s*=\s*"([^"]{8,})"/,
+      /csrfToken\s*[:=]\s*"([^"]{8,})"/,
+      // "h" is de CSRF param naam in Grepolis frontend bridge calls
+      /[,{]\s*"h"\s*:\s*"([^"]{8,})"/,
       // Meta tag
-      /<meta[^>]+name=["']csrf-token["'][^>]+content=["']([^"']+)["']/,     // index 1
+      /<meta[^>]+name=["']csrf-token["'][^>]+content=["']([^"']+)["']/,
     ];
 
     for (const pat of patterns) {
       const m = html.match(pat);
       if (m) {
-        // Sommige patronen hebben de waarde op index 1, andere op index 2
-        const val = m[2] ?? m[1];
-        if (val && val.length >= 8) {
-          this.csrfToken = val;
-          logger.info(`CSRF gevonden: patroon "${pat.source.substring(0,40)}..."`);
-          return;
-        }
+        this.csrfToken = m[1];
+        logger.info(`CSRF gevonden via patroon: ${pat.source.substring(0, 50)}`);
+        return;
       }
     }
 
-    // player_id ophalen als fallback
+    // player_id
     if (!this.playerId) {
-      const pid = html.match(/['"](player_id)['"]\s*:\s*(\d+)/);
-      if (pid) this.playerId = parseInt(pid[2]);
+      const pid = html.match(/"player_id"\s*:\s*(\d+)/);
+      if (pid) { this.playerId = parseInt(pid[1]); logger.info(`player_id gevonden: ${this.playerId}`); }
     }
   }
 
@@ -114,7 +119,13 @@ class Session {
     const res = await this.client.post(
       `${this.baseUrl}/game/${this.world}/frontend_bridge.php`,
       payload.toString(),
-      { headers: { ...this._headers(), "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "X-Requested-With": "XMLHttpRequest" } }
+      {
+        headers: {
+          ...this._headers(),
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+          "X-Requested-With": "XMLHttpRequest",
+        },
+      }
     );
     return res.data;
   }
