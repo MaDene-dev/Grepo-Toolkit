@@ -16,8 +16,8 @@
   "autofarm": {
     "enabled": true,
     "mode": "loot",
-    "interval_minutes": 30,
+    "interval_minutes": 14,
     "randomize_interval": true,
-    "randomize_range_minutes": 5
+    "randomize_range_minutes": 3
   }
 }
