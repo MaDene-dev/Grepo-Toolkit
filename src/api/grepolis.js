@@ -10,17 +10,17 @@ class GrepolisAPI {
       logger.info(`[API] Steden uit config gebruikt`);
       return this.session.config.account.towns;
     }
-    throw new Error("Geen steden in config.json gevonden. Voeg je stad toe aan 'towns'.");
+    throw new Error("Geen steden in config.json gevonden.");
   }
 
-  // Controleer of er grondstoffen klaar zijn om op te halen
-  async checkLoadsAvailable(town) {
+  async getFarmOverview(town) {
     const jsonPayload = JSON.stringify({
       island_x:             town.island_x,
       island_y:             town.island_y,
+      current_town_id:      town.id,
       booty_researched:     "",
-      trade_office:         0,
       diplomacy_researched: "",
+      trade_office:         0,
       town_id:              town.id,
       nl_init:              true,
     });
@@ -29,42 +29,44 @@ class GrepolisAPI {
       "farm_town_overviews", town.id, "get_farm_towns_for_town", jsonPayload
     );
 
-    logger.info(`[API] Overzicht: ${JSON.stringify(data).substring(0, 400)}`);
+    const now = Math.floor(Date.now() / 1000);
+    const farmList = data?.farm_town_list ?? [];
+    const owned = farmList.filter(v => v.rel === 1);
+    const ready = owned.filter(v => !v.loot || v.loot < now);
 
-    // Controleer via het menu of "Verzamelen" actief is
-    if (data?.menu) {
-      try {
-        const menu = typeof data.menu === "string" ? JSON.parse(data.menu) : data.menu;
-        const claimItem = menu?.fto_claim;
-        if (claimItem?.className === "active") {
-          logger.info(`[API] Grondstoffen beschikbaar (menu: active)`);
-          return true;
-        }
-        logger.info(`[API] Menu status: ${JSON.stringify(claimItem)}`);
-      } catch (_) {}
+    logger.info(`[API] ${owned.length} eigen dorpen, ${ready.length} klaar`);
+    if (ready.length > 0) {
+      logger.info(`[API] Klaar: ${ready.map(v => v.name).join(", ")}`);
     }
 
-    // Fallback: check of loads_data niet leeg is
-    if (data?.loads_data && Object.keys(data.loads_data).length > 0) {
-      logger.info(`[API] loads_data aanwezig: ${Object.keys(data.loads_data).join(", ")} seconden`);
-      return true;
-    }
-
-    return false;
+    return { owned, ready };
   }
 
-  // Claim alle beschikbare grondstoffen voor een stad
-  async claimLoads(townId) {
-    const data = await this.session.gameGet(
-      "farm_town_overviews", townId, "claim_loads"
-    );
-    logger.info(`[API] claim_loads response: ${JSON.stringify(data).substring(0, 400)}`);
+  // POST met exacte payload die de browser stuurt
+  async claimLoads(town, farmTownIds) {
+    const jsonPayload = JSON.stringify({
+      farm_town_ids:    farmTownIds,
+      time_option:      300,
+      claim_factor:     "normal",
+      current_town_id:  town.id,
+      town_id:          town.id,
+      nl_init:          true,
+    });
 
-    if (data?.error) {
-      logger.warn(`[API] claim_loads fout: ${data.error}`);
-      return false;
+    const data = await this.session.gamePost(
+      "farm_town_overviews", town.id, "claim_loads", jsonPayload
+    );
+
+    logger.info(`[API] claim_loads: ${JSON.stringify(data).substring(0, 200)}`);
+
+    if (data?.success) {
+      logger.info(`[API] ✓ ${data.success}`);
+      return true;
     }
-    return true;
+    if (data?.error) {
+      logger.warn(`[API] Fout: ${data.error}`);
+    }
+    return false;
   }
 }
 
