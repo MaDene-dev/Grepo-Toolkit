@@ -59,32 +59,39 @@ class Autofarm {
     logger.info(`[Autofarm] Stad: ${town.name} (id: ${town.id}, eiland: ${town.island_x},${town.island_y})`);
 
     try {
-      // Stap 1: Haal farming villages op om te zien wat beschikbaar is
+      // Stap 1: Haal farming villages op
+      logger.info(`[Autofarm]   Farming villages ophalen...`);
       const villages = await this.api.getFarmingVillages(town);
+      logger.info(`[Autofarm]   Gevonden: ${villages.length} dorpen`);
 
       if (!villages.length) {
-        logger.info(`[Autofarm]   Geen farming villages gevonden.`);
+        logger.info(`[Autofarm]   Geen farming villages beschikbaar.`);
         return;
       }
+
+      // Log eerste dorp zodat we de datastructuur zien
+      logger.info(`[Autofarm]   Voorbeeld dorp: ${JSON.stringify(villages[0]).substring(0, 200)}`);
 
       const beschikbaar = villages.filter(v => this._isAvailable(v));
-      logger.info(`[Autofarm]   ${villages.length} dorpen, ${beschikbaar.length} beschikbaar.`);
+      logger.info(`[Autofarm]   ${beschikbaar.length} van ${villages.length} beschikbaar.`);
 
       if (beschikbaar.length === 0) {
-        logger.info(`[Autofarm]   Alles in cooldown, sla over.`);
+        logger.info(`[Autofarm]   Alles in cooldown.`);
         return;
       }
 
-      // Stap 2: Claim alle beschikbare grondstoffen in één call
+      // Stap 2: Claim alle beschikbare grondstoffen
+      logger.info(`[Autofarm]   claim_loads uitvoeren...`);
       const succes = await this.api.claimLoads(town.id);
       if (succes) {
         this.lastFarmed[town.id] = Date.now();
-        logger.info(`[Autofarm]   ✓ ${beschikbaar.length} dorpen gefarmd.`);
+        logger.info(`[Autofarm]   ✓ Gefarmd! ${beschikbaar.length} dorpen.`);
       } else {
         logger.warn(`[Autofarm]   claim_loads mislukt voor ${town.name}.`);
       }
     } catch (err) {
-      logger.warn(`[Autofarm]   Fout bij ${town.name}: ${err.message}`);
+      logger.error(`[Autofarm]   Fout bij ${town.name}: ${err.message}`);
+      logger.error(err.stack);
     }
   }
 
