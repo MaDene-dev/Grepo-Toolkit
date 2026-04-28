@@ -12,7 +12,6 @@ async function refreshCookies(config) {
   const langPrefix = world.match(/^([a-z]+)/)?.[1] ?? "en";
   const portal     = `https://${langPrefix}-play.grepolis.com`;
   const startUrl   = `https://${langPrefix}0.grepolis.com/start/index`;
-  const gameUrl    = `https://${world}.grepolis.com/game/${world}`;
 
   if (!username || !password) throw new Error("GREPO_EMAIL en GREPO_PASSWORD zijn vereist.");
 
@@ -27,7 +26,23 @@ async function refreshCookies(config) {
     await page.setViewport({ width: 1280, height: 800 });
     await page.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
 
-    // Stap 1: Login via portaal
+    // Onderschep de login-redirect URL (bevat ?login=1&p=...&ts=...)
+    let loginRedirectUrl = null;
+    page.on("request", request => {
+      const url = request.url();
+      if (url.includes(`${world}.grepolis.com`) && url.includes("login=1")) {
+        loginRedirectUrl = url;
+        logger.info(`[CookieRefresher] Login-URL onderschept: ${url}`);
+      }
+    });
+    page.on("response", response => {
+      const url = response.url();
+      if (url.includes(`${world}.grepolis.com`) && url.includes("login=1")) {
+        loginRedirectUrl = url;
+      }
+    });
+
+    // Stap 1: Inloggen op portaal
     logger.info(`[CookieRefresher] Portaal laden: ${portal}`);
     await page.goto(portal, { waitUntil: "networkidle2", timeout: 30000 });
     await page.waitForSelector("input[type='email'], input[name='login'], input[type='text']", { timeout: 15000 });
@@ -42,48 +57,63 @@ async function refreshCookies(config) {
     await new Promise(r => setTimeout(r, 4000));
     logger.info(`[CookieRefresher] URL na login: ${page.url()}`);
 
-    // Stap 2: Ga naar de startpagina met wereldoverzicht
+    // Stap 2: Naar startpagina met wereldkeuze
     logger.info(`[CookieRefresher] Startpagina laden: ${startUrl}`);
     await page.goto(startUrl, { waitUntil: "networkidle2", timeout: 30000 });
-    await new Promise(r => setTimeout(r, 3000));
-    logger.info(`[CookieRefresher] Startpagina geladen: ${(await page.content()).length} bytes`);
+    await new Promise(r => setTimeout(r, 2000));
 
-    // Stap 3: Zoek de "Spelen" knop voor de juiste wereld
-    // De knop heeft href naar nl133.grepolis.com of data-uni="nl133"
-    const playUrl = await page.evaluate((world) => {
-      // Zoek alle links/knoppen
-      const all = Array.from(document.querySelectorAll("a, button, input[type='button']"));
+    // Stap 3: Vind en klik de "Spelen" knop voor de juiste wereld
+    logger.info(`[CookieRefresher] Zoeken naar Spelen-knop voor ${world}...`);
 
-      // Optie A: link die direct naar de game verwijst
-      const gameLink = all.find(el => el.href?.includes(`${world}.grepolis.com`));
-      if (gameLink) return gameLink.href;
-
-      // Optie B: knop met world in data-attribuut
-      const dataEl = document.querySelector(`[data-uni="${world}"], [data-world="${world}"]`);
-      if (dataEl) { dataEl.click(); return "clicked-data"; }
-
-      // Optie C: log alle hrefs die grepolis.com bevatten
-      const grepoLinks = all.filter(el => el.href?.includes("grepolis.com"));
-      return grepoLinks.map(el => el.href).join("|");
+    // Log alle links en knoppen voor diagnose
+    const allLinks = await page.evaluate((world) => {
+      return Array.from(document.querySelectorAll("a, button, input[type=submit]"))
+        .map(el => ({ tag: el.tagName, text: el.textContent?.trim().substring(0, 40), href: el.href || "", onclick: el.getAttribute("onclick") || "" }))
+        .filter(el => el.text || el.href.includes("grepolis"));
     }, world);
 
-    logger.info(`[CookieRefresher] Play URL gevonden: ${playUrl?.substring(0, 150)}`);
+    logger.info(`[CookieRefresher] Knoppen op pagina:`);
+    allLinks.forEach(el => logger.info(`  [${el.tag}] "${el.text}" href="${el.href.substring(0,60)}" onclick="${el.onclick.substring(0,60)}"`));
 
-    if (playUrl && playUrl.includes(`${world}.grepolis.com`)) {
-      // Navigeer direct naar de game URL
-      logger.info(`[CookieRefresher] Navigeer naar game: ${playUrl}`);
-      await page.goto(playUrl, { waitUntil: "networkidle2", timeout: 30000 });
-    } else {
-      // Fallback: navigeer direct naar game URL (werkt als sessie al geldig is)
-      logger.info(`[CookieRefresher] Directe navigatie naar: ${gameUrl}`);
-      await page.goto(gameUrl, { waitUntil: "networkidle2", timeout: 30000 });
+    // Klik op de knop die naar nl133 verwijst of "Spelen" zegt
+    const clicked = await page.evaluate((world) => {
+      const all = Array.from(document.querySelectorAll("a, button, input[type=submit]"));
+
+      // Zoek op href die world bevat
+      const byHref = all.find(el => el.href?.includes(world + ".grepolis.com"));
+      if (byHref) { byHref.click(); return `href: ${byHref.href}`; }
+
+      // Zoek op onclick die world bevat
+      const byOnclick = all.find(el => el.getAttribute("onclick")?.includes(world));
+      if (byOnclick) { byOnclick.click(); return `onclick: ${byOnclick.getAttribute("onclick")}`; }
+
+      // Zoek "Spelen" knop (NL) of "Play" (EN)
+      const byText = all.find(el => ["spelen", "play", "spelen!"].includes(el.textContent?.trim().toLowerCase()));
+      if (byText) { byText.click(); return `text: ${byText.textContent?.trim()}`; }
+
+      return null;
+    }, world);
+
+    logger.info(`[CookieRefresher] Geklikt: ${clicked ?? "niets gevonden"}`);
+
+    // Stap 4: Wacht op de login-redirect URL
+    let waited = 0;
+    while (!loginRedirectUrl && waited < 15) {
+      await new Promise(r => setTimeout(r, 1000));
+      waited++;
     }
 
-    await new Promise(r => setTimeout(r, 4000));
-    const finalSize = (await page.content()).length;
-    logger.info(`[CookieRefresher] Eindpagina: ${finalSize} bytes | URL: ${page.url()}`);
+    if (loginRedirectUrl) {
+      // Navigeer naar de onderschepte URL om sessie-cookies te krijgen
+      logger.info(`[CookieRefresher] Navigeren naar login URL...`);
+      await page.goto(loginRedirectUrl, { waitUntil: "networkidle2", timeout: 30000 });
+      await new Promise(r => setTimeout(r, 4000));
+      logger.info(`[CookieRefresher] Eindpagina: ${(await page.content()).length} bytes | ${page.url()}`);
+    } else {
+      logger.warn(`[CookieRefresher] Login-redirect URL niet onderschept`);
+    }
 
-    // Stap 4: Cookies ophalen
+    // Stap 5: Cookies ophalen van alle domeinen
     const cookies = await page.cookies(
       `https://${world}.grepolis.com`,
       portal,
@@ -91,7 +121,7 @@ async function refreshCookies(config) {
     );
 
     logger.info(`[CookieRefresher] ${cookies.length} cookies opgehaald`);
-    if (cookies.length < 5) throw new Error(`Te weinig cookies (${cookies.length})`);
+    if (cookies.length < 5) throw new Error(`Te weinig cookies (${cookies.length}) — login mislukt`);
 
     const cookieData = cookies.map(c => ({
       name: c.name, value: c.value, domain: c.domain,
