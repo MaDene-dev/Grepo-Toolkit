@@ -1,7 +1,7 @@
 const axios = require("axios");
 const { wrapper } = require("axios-cookiejar-support");
 const { CookieJar, Cookie } = require("tough-cookie");
-const fs = require("fs");
+const fs   = require("fs");
 const path = require("path");
 const logger = require("../utils/logger");
 
@@ -9,29 +9,67 @@ const COOKIES_FILE = path.join(__dirname, "../../cookies.json");
 
 class Session {
   constructor(config) {
-    this.config = config;
-    this.jar = new CookieJar();
-    this.client = wrapper(
-      axios.create({
-        jar: this.jar,
-        withCredentials: true,
-        maxRedirects: 10,
-        validateStatus: (s) => s < 500,
-      })
-    );
+    this.config   = config;
+    this.jar      = new CookieJar();
+    this.client   = wrapper(axios.create({ jar: this.jar, withCredentials: true, maxRedirects: 10, validateStatus: s => s < 500 }));
     this.csrfToken = null;
-    this.playerId = config.account.player_id || null;
-    this.world = config.account.world;
-    this.baseUrl = `https://${this.world}.grepolis.com`;
-    this.lastHtml = null;
+    this.playerId  = config.account.player_id || null;
+    this.world     = config.account.world;
+    this.baseUrl   = `https://${this.world}.grepolis.com`;
+    this.lastHtml  = null;
   }
 
   async login() {
     logger.info("Sessie opzetten via cookies...");
 
+    // Als geen cookies.json: probeer automatisch in te loggen via Puppeteer
     if (!fs.existsSync(COOKIES_FILE)) {
-      throw new Error("cookies.json niet gevonden! Zie README voor instructies.");
+      logger.info("Geen cookies.json gevonden, probeer automatisch in te loggen...");
+      await this._autoLogin();
     }
+
+    await this._loadCookies();
+
+    logger.info("Gamepagina laden...");
+    const res = await this.client.get(`${this.baseUrl}/game/${this.world}`, { headers: this._headers() });
+    logger.info(`Status: ${res.status} | Grootte: ${res.data.length} bytes`);
+    this.lastHtml = res.data;
+
+    this._extractCsrf(res.data);
+
+    // Als CSRF nog steeds niet gevonden: cookies verlopen → probeer opnieuw in te loggen
+    if (!this.csrfToken) {
+      logger.warn("CSRF niet gevonden, cookies mogelijk verlopen. Probeer opnieuw in te loggen...");
+      await this._autoLogin();
+      await this._loadCookies();
+
+      const res2 = await this.client.get(`${this.baseUrl}/game/${this.world}`, { headers: this._headers() });
+      this.lastHtml = res2.data;
+      this._extractCsrf(res2.data);
+    }
+
+    if (!this.csrfToken) {
+      throw new Error("Geen CSRF-token gevonden. Cookies mogelijk verlopen — exporteer opnieuw.");
+    }
+
+    logger.info(`✓ Sessie OK | player_id: ${this.playerId} | csrf: ${this.csrfToken.substring(0, 8)}...`);
+  }
+
+  async _autoLogin() {
+    try {
+      const { refreshCookies } = require("./cookie-refresher");
+      await refreshCookies(this.config);
+    } catch (err) {
+      logger.warn(`[AutoLogin] Automatisch inloggen mislukt: ${err.message}`);
+      logger.warn("[AutoLogin] Puppeteer mogelijk niet beschikbaar. Exporteer cookies handmatig.");
+      throw new Error("Geen CSRF-token gevonden. Cookies mogelijk verlopen — exporteer opnieuw.");
+    }
+  }
+
+  async _loadCookies() {
+    // Reset jar
+    this.jar = new CookieJar();
+    this.client = wrapper(axios.create({ jar: this.jar, withCredentials: true, maxRedirects: 10, validateStatus: s => s < 500 }));
 
     const raw = JSON.parse(fs.readFileSync(COOKIES_FILE, "utf8"));
     logger.info(`${raw.length} cookies geladen uit cookies.json`);
@@ -40,32 +78,13 @@ class Session {
       const domain = (c.domain ?? `${this.world}.grepolis.com`).replace(/^\./, "");
       try {
         const cookie = new Cookie({
-          key:      c.name,
-          value:    c.value,
-          domain:   domain,
-          path:     c.path ?? "/",
-          secure:   c.secure ?? true,
-          httpOnly: c.httpOnly ?? false,
-          expires:  c.expirationDate ? new Date(c.expirationDate * 1000) : "Infinity",
+          key: c.name, value: c.value, domain, path: c.path ?? "/",
+          secure: c.secure ?? true, httpOnly: c.httpOnly ?? false,
+          expires: c.expirationDate ? new Date(c.expirationDate * 1000) : "Infinity",
         });
         await this.jar.setCookie(cookie, `https://${domain}`);
       } catch (_) {}
     }
-
-    logger.info("Gamepagina laden...");
-    const res = await this.client.get(`${this.baseUrl}/game/${this.world}`, {
-      headers: this._headers(),
-    });
-    logger.info(`Status: ${res.status} | Grootte: ${res.data.length} bytes`);
-    this.lastHtml = res.data;
-
-    this._extractCsrf(res.data);
-
-    if (!this.csrfToken) {
-      throw new Error("Geen CSRF-token gevonden. Cookies mogelijk verlopen — exporteer opnieuw.");
-    }
-
-    logger.info(`✓ Sessie OK | player_id: ${this.playerId} | csrf: ${this.csrfToken.substring(0, 8)}...`);
   }
 
   _extractCsrf(html) {
@@ -77,11 +96,7 @@ class Session {
     ];
     for (const pat of patterns) {
       const m = html.match(pat);
-      if (m) {
-        this.csrfToken = m[1];
-        logger.info(`CSRF gevonden via patroon: ${pat.source.substring(0, 50)}`);
-        return;
-      }
+      if (m) { this.csrfToken = m[1]; logger.info(`CSRF gevonden.`); return; }
     }
     if (!this.playerId) {
       const pid = html.match(/"player_id"\s*:\s*(\d+)/);
@@ -89,46 +104,21 @@ class Session {
     }
   }
 
-  // GET request naar Grepolis game endpoints
   async gameGet(endpoint, townId, action, jsonPayload = null) {
-    const params = new URLSearchParams({
-      town_id: townId,
-      action:  action,
-      h:       this.csrfToken,
-      _:       Date.now(),
-    });
+    const params = new URLSearchParams({ town_id: townId, action, h: this.csrfToken, _: Date.now() });
     if (jsonPayload) params.set("json", jsonPayload);
-
-    const url = `${this.baseUrl}/game/${endpoint}?${params.toString()}`;
-    const res = await this.client.get(url, {
-      headers: {
-        ...this._headers(),
-        "X-Requested-With": "XMLHttpRequest",
-        "Accept": "application/json, text/javascript, */*",
-      },
+    const res = await this.client.get(`${this.baseUrl}/game/${endpoint}?${params}`, {
+      headers: { ...this._headers(), "X-Requested-With": "XMLHttpRequest", Accept: "application/json, */*" },
     });
     return res.data?.json ?? res.data;
   }
 
-  // POST naar Grepolis game endpoints (voor acties zoals claim_loads)
   async gamePost(endpoint, townId, action, jsonPayload = null) {
-    const params = new URLSearchParams({
-      town_id: townId,
-      action:  action,
-      h:       this.csrfToken,
-    });
-
+    const params   = new URLSearchParams({ town_id: townId, action, h: this.csrfToken });
     const formData = new URLSearchParams();
     if (jsonPayload) formData.set("json", jsonPayload);
-
-    const url = `${this.baseUrl}/game/${endpoint}?${params.toString()}`;
-    const res = await this.client.post(url, formData.toString(), {
-      headers: {
-        ...this._headers(),
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        "X-Requested-With": "XMLHttpRequest",
-        "Accept": "application/json, text/javascript, */*",
-      },
+    const res = await this.client.post(`${this.baseUrl}/game/${endpoint}?${params}`, formData.toString(), {
+      headers: { ...this._headers(), "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "X-Requested-With": "XMLHttpRequest", Accept: "application/json, */*" },
     });
     return res.data?.json ?? res.data;
   }
