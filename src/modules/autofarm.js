@@ -15,8 +15,8 @@ class Autofarm {
     this.running   = false;
     this.timer     = null;
     this.startTime = Date.now();
-    this.roundNum  = 0;         // Teller over de hele sessie
-    this.nextRunAt = null;      // Tijdstip van volgende ronde
+    this.roundNum  = 0;
+    this.nextRunAt = null;
     this.stats     = this._emptyStats();
     this.history   = [];
   }
@@ -41,7 +41,6 @@ class Autofarm {
     logger.info("[Autofarm] Gestopt.");
   }
 
-  // Geeft huidige NL-tijd terug
   _nlTime() {
     const now = new Date();
     const jan = new Date(now.getFullYear(), 0, 1).getTimezoneOffset();
@@ -56,22 +55,18 @@ class Autofarm {
     return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`;
   }
 
-  // Bereken hoeveel rondes er nog passen in het actieve blok
   _estimateRoundsLeft(slot) {
     if (!slot) return 0;
     const { totalMins } = this._nlTime();
     const endMins = slot.hour_end * 60;
-    const remaining = endMins - totalMins;
-    return Math.max(0, Math.floor(remaining / slot.interval_minutes));
+    return Math.max(0, Math.floor((endMins - totalMins) / slot.interval_minutes));
   }
 
   _logStartupSummary() {
-    const slot = this._getCurrentSlot();
+    const slot   = this._getCurrentSlot();
     const active = this._isActiveHour();
-
     logger.info(`[Autofarm] ═══════════════════════════════`);
     logger.info(`[Autofarm] Bot gestart | ${this._nlTimeStr()} | ${this.world.toUpperCase()}`);
-
     if (active && slot) {
       const rondesLeft = this._estimateRoundsLeft(slot);
       const opties = slot.options.map(o => `${TIME_LABELS[o.time_option]}(${o.weight}%)`).join(" / ");
@@ -79,9 +74,9 @@ class Autofarm {
       logger.info(`[Autofarm] Tijdopties: ${opties}`);
       logger.info(`[Autofarm] Geschat nog ~${rondesLeft} rondes in dit blok`);
     } else {
-      const morning = this.schedule.active_hours_morning;
-      const evening = this.schedule.active_hours_evening;
-      logger.info(`[Autofarm] Buiten actieve uren | schema: ${morning.start_h}:${String(morning.start_m).padStart(2,"0")}–${morning.end_h}:00 / ${evening.start_h}:${String(evening.start_m).padStart(2,"0")}–${evening.end_h}:00`);
+      const m = this.schedule.active_hours_morning;
+      const e = this.schedule.active_hours_evening;
+      logger.info(`[Autofarm] Buiten actieve uren | schema: ${m.start_h}:${String(m.start_m).padStart(2,"0")}–${m.end_h}:00 / ${e.start_h}:${String(e.start_m).padStart(2,"0")}–${e.end_h}:00`);
     }
     logger.info(`[Autofarm] Rapport na elke ${this.schedule.report_every_n_runs} rondes`);
     logger.info(`[Autofarm] ═══════════════════════════════`);
@@ -133,14 +128,14 @@ class Autofarm {
     if (!slot || !this._isActiveHour()) {
       const wait = (15 + Math.random() * 10) * 60 * 1000;
       this.nextRunAt = new Date(Date.now() + wait);
-      logger.info(`[Autofarm] Buiten actieve uren | volgende check: ${this.nextRunAt.toLocaleTimeString("nl-BE", {hour:"2-digit",minute:"2-digit"})}`);
+      logger.info(`[Autofarm] Buiten actieve uren | volgende check: ${this.nextRunAt.toLocaleTimeString("nl-BE", {timeZone:"Europe/Brussels",hour:"2-digit",minute:"2-digit",second:"2-digit"})}`);
       this.timer = setTimeout(() => this.run(), wait);
       return;
     }
     const delay = this._calcDelay(slot);
     this.nextRunAt = new Date(Date.now() + delay);
     const rondesLeft = this._estimateRoundsLeft(slot);
-    logger.info(`[Autofarm] Volgende ophaling: ${this.nextRunAt.toLocaleTimeString("nl-BE", {hour:"2-digit",minute:"2-digit",second:"2-digit"})} | nog ~${rondesLeft} rondes in dit blok`);
+    logger.info(`[Autofarm] Volgende ophaling: ${this.nextRunAt.toLocaleTimeString("nl-BE", {timeZone:"Europe/Brussels",hour:"2-digit",minute:"2-digit",second:"2-digit"})} | nog ~${rondesLeft} rondes in dit blok`);
     this.timer = setTimeout(() => this.run(), delay);
   }
 
@@ -158,6 +153,7 @@ class Autofarm {
     logger.info(`[Autofarm] ── Ronde #${this.roundNum} | ${this._nlTimeStr()} | optie: ${label} ──`);
 
     let wood = 0, stone = 0, iron = 0, farms = 0;
+    let lastStorage = null;
 
     try {
       const towns = await this.api.getTowns();
@@ -168,6 +164,8 @@ class Autofarm {
           stone += r.stone ?? 0;
           iron  += r.iron  ?? 0;
           farms += r.farms ?? 0;
+          // Bewaar de meest recente opslag-info
+          if (r.storageWood !== undefined) lastStorage = r;
           await this._sleep(2000 + Math.random() * 3000);
         }
       }
@@ -182,17 +180,20 @@ class Autofarm {
 
       this.history.push({
         time: this._nlTimeStr(), label, wood, stone, iron, farms,
+        storageWood:  lastStorage?.storageWood  ?? 0,
+        storageStone: lastStorage?.storageStone ?? 0,
+        storageIron:  lastStorage?.storageIron  ?? 0,
+        storageMax:   lastStorage?.storageMax   ?? 0,
         duration: dur, roundNum: this.roundNum,
       });
       if (this.history.length > 50) this.history.shift();
 
       if (farms > 0) {
-        logger.info(
-          `[Autofarm] ✓ Ronde #${this.roundNum} | ${farms} dorpen | 🪵${wood} 🪨${stone} 🪙${iron} | ${dur}s`
-        );
-        logger.info(
-          `[Autofarm] Cumulatief | 🪵${this.stats.totalWood} 🪨${this.stats.totalStone} 🪙${this.stats.totalIron} | ${this.stats.runs} rondes`
-        );
+        const storageStr = lastStorage
+          ? ` | opslag: 🪵${lastStorage.storageWood} 🪨${lastStorage.storageStone} 🪙${lastStorage.storageIron}/${lastStorage.storageMax}`
+          : "";
+        logger.info(`[Autofarm] ✓ Ronde #${this.roundNum} | ${farms} dorpen | opgehaald: 🪵${wood} 🪨${stone} 🪙${iron}${storageStr} | ${dur}s`);
+        logger.info(`[Autofarm] Cumulatief | 🪵${this.stats.totalWood} 🪨${this.stats.totalStone} 🪙${this.stats.totalIron} | ${this.stats.runs} rondes`);
       } else {
         logger.info(`[Autofarm] Ronde #${this.roundNum} | niets te halen | ${dur}s`);
       }
@@ -241,9 +242,12 @@ class Autofarm {
     const perUur  = elapsed > 0 ? Math.round(totaal / elapsed * 60) : 0;
     const uptime  = Math.round((Date.now() - this.startTime) / 60000);
 
-    const recentRondes = this.history.slice(-5).reverse().map(r =>
-      `  #${String(r.roundNum).padStart(3)} | ${r.time} | ${r.label.padEnd(6)} | 🪵${String(r.wood).padStart(4)} 🪨${String(r.stone).padStart(4)} 🪙${String(r.iron).padStart(4)} | ${r.farms} dorpen`
-    ).join("\n");
+    const recentRondes = this.history.slice(-5).reverse().map(r => {
+      const opslag = r.storageMax > 0
+        ? ` | opslag: 🪵${r.storageWood} 🪨${r.storageStone} 🪙${r.storageIron}/${r.storageMax}`
+        : "";
+      return `  #${String(r.roundNum).padStart(3)} | ${r.time} | ${r.label.padEnd(6)} | opgehaald: 🪵${String(r.wood).padStart(4)} 🪨${String(r.stone).padStart(4)} 🪙${String(r.iron).padStart(4)}${opslag}`;
+    }).join("\n");
 
     const text = [
       `📊 FARM RAPPORT — ${new Date().toLocaleString("nl-BE")}`,
