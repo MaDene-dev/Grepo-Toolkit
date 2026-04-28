@@ -62,8 +62,18 @@ class GrepolisAPI {
     }
 
     if (data?.success) {
-      const res = data.resources ?? {};
-      return { wood: res.wood ?? 0, stone: res.stone ?? 0, iron: res.iron ?? 0 };
+      // claimed_resources_per_resource_type = wat je NET opgehaald hebt per grondstof
+      const claimed  = data.claimed_resources_per_resource_type ?? 0;
+      const storage  = data.resources ?? {};
+      return {
+        wood:   claimed,
+        stone:  claimed,
+        iron:   claimed,
+        storageWood:  storage.wood  ?? 0,
+        storageStone: storage.stone ?? 0,
+        storageIron:  storage.iron  ?? 0,
+        storageMax:   data.storage  ?? 0,
+      };
     }
 
     if (data?.error) {
