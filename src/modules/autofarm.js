@@ -58,7 +58,16 @@ class Autofarm {
   _estimateRoundsLeft(slot) {
     if (!slot) return 0;
     const { totalMins } = this._nlTime();
-    const endMins = slot.hour_end * 60;
+    const s = this.schedule;
+
+    // Bepaal het exacte eindpunt van het actieve blok
+    let endMins = slot.hour_end * 60;
+    if (s.active_hours_morning && totalMins < s.active_hours_morning.end_h * 60) {
+      endMins = s.active_hours_morning.end_h * 60 + (s.active_hours_morning.end_m ?? 0);
+    } else if (s.active_hours_evening) {
+      endMins = s.active_hours_evening.end_h * 60 + (s.active_hours_evening.end_m ?? 0);
+    }
+
     return Math.max(0, Math.floor((endMins - totalMins) / slot.interval_minutes));
   }
 
@@ -118,7 +127,10 @@ class Autofarm {
   _calcDelay(slot) {
     const base   = slot.interval_minutes * 60 * 1000;
     const jitter = (Math.random() * 2 - 1) * slot.jitter_minutes * 60 * 1000;
-    const extra  = Math.random() < 0.10 ? (5 + Math.random() * 10) * 60 * 1000 : 0;
+    const eb     = this.schedule.extra_break ?? { enabled: true, chance: 0.10, min_minutes: 5, max_minutes: 10 };
+    const extra  = eb.enabled && Math.random() < eb.chance
+      ? (eb.min_minutes + Math.random() * (eb.max_minutes - eb.min_minutes)) * 60 * 1000
+      : 0;
     if (extra > 0) logger.info(`[Autofarm] Extra pauze ingebouwd (~${Math.round(extra/60000)} min)`);
     return Math.max(60_000, base + jitter + extra);
   }
@@ -233,7 +245,8 @@ class Autofarm {
       `Tijdstip: ${new Date().toLocaleString("nl-BE")}\nWereld: ${this.world.toUpperCase()}\n\nLos de CAPTCHA op in je browser.\nDe bot herstart automatisch na 45 minuten.`
     );
     this.stop();
-    setTimeout(() => { this.start(); }, 45 * 60 * 1000);
+    const pauseMs = (this.config.captcha?.pause_minutes ?? 45) * 60 * 1000;
+    setTimeout(() => { this.start(); }, pauseMs);
   }
 
   async _sendReport() {
