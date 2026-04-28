@@ -1,89 +1,39 @@
 {
   "account": {
-    "world": "nl132",
+    "world": "nl133",
     "player_id": 1361000,
     "towns": [
       {
-        "id": 3323,
-        "name": "Marcotics",
-        "island_x": 464,
-        "island_y": 455
+        "id": 329,
+        "name": "Stad van Marcotics",
+        "island_x": 475,
+        "island_y": 503
       }
     ]
   },
   "schedule": {
     "enabled": true,
-    "active_hours": { "start": 7, "end": 23 },
-    "report_every_n_runs": 10,
-
-    "time_options": {
-      "short":  { "seconds": 600,   "label": "10 min" },
-      "medium": { "seconds": 2400,  "label": "40 min" },
-      "long":   { "seconds": 10800, "label": "3u"     },
-      "night":  { "seconds": 28800, "label": "8u"     }
-    },
-
+    "active_hours_morning": { "start_h": 6, "start_m": 30, "end_h": 12, "end_m": 0 },
+    "active_hours_evening": { "start_h": 17, "start_m": 30, "end_h": 23, "end_m": 0 },
+    "report_every_n_runs": 15,
     "slots": [
       {
-        "hour_start": 7, "hour_end": 9,
-        "comment": "Ochtend opstarten — korte sessies",
+        "hour_start": 6,  "hour_end": 12,
+        "comment": "Ochtend 6:30-12u — elke 5 min",
         "options": [
-          { "time_option": 600,   "weight": 70 },
-          { "time_option": 2400,  "weight": 30 }
+          { "time_option": 300, "weight": 100 }
         ],
-        "interval_minutes": 11,
-        "jitter_minutes": 3
+        "interval_minutes": 5,
+        "jitter_minutes": 1
       },
       {
-        "hour_start": 9, "hour_end": 12,
-        "comment": "Voormiddag — mix kort/medium",
+        "hour_start": 17, "hour_end": 23,
+        "comment": "Avond 17:30-23u — elke 5 min",
         "options": [
-          { "time_option": 600,   "weight": 50 },
-          { "time_option": 2400,  "weight": 50 }
+          { "time_option": 300, "weight": 100 }
         ],
-        "interval_minutes": 18,
-        "jitter_minutes": 5
-      },
-      {
-        "hour_start": 12, "hour_end": 14,
-        "comment": "Middag — even ruimer",
-        "options": [
-          { "time_option": 600,   "weight": 30 },
-          { "time_option": 2400,  "weight": 50 },
-          { "time_option": 10800, "weight": 20 }
-        ],
-        "interval_minutes": 25,
-        "jitter_minutes": 7
-      },
-      {
-        "hour_start": 14, "hour_end": 18,
-        "comment": "Namiddag — actief",
-        "options": [
-          { "time_option": 600,   "weight": 60 },
-          { "time_option": 2400,  "weight": 40 }
-        ],
-        "interval_minutes": 13,
-        "jitter_minutes": 4
-      },
-      {
-        "hour_start": 18, "hour_end": 21,
-        "comment": "Avond — rustiger",
-        "options": [
-          { "time_option": 2400,  "weight": 40 },
-          { "time_option": 10800, "weight": 60 }
-        ],
-        "interval_minutes": 45,
-        "jitter_minutes": 12
-      },
-      {
-        "hour_start": 21, "hour_end": 23,
-        "comment": "Late avond — voor het slapen",
-        "options": [
-          { "time_option": 10800, "weight": 30 },
-          { "time_option": 28800, "weight": 70 }
-        ],
-        "interval_minutes": 90,
-        "jitter_minutes": 20
+        "interval_minutes": 5,
+        "jitter_minutes": 1
       }
     ]
   },
