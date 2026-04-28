@@ -1,9 +1,13 @@
 {
+  "_uitleg": "Dit is het hoofdconfiguratiebestand. Pas hier alle instellingen aan.",
+
   "account": {
+    "_uitleg": "Jouw spelgegevens. Email/wachtwoord worden geladen via GitHub Secrets, niet hier.",
     "world": "nl133",
     "player_id": 1361000,
     "towns": [
       {
+        "_uitleg": "Voeg extra steden toe als je meerdere steden hebt",
         "id": 329,
         "name": "Stad van Marcotics",
         "island_x": 475,
@@ -11,33 +15,69 @@
       }
     ]
   },
+
   "schedule": {
+    "_uitleg": "Wanneer en hoe vaak de bot farmt",
     "enabled": true,
-    "active_hours_morning": { "start_h": 6, "start_m": 30, "end_h": 12, "end_m": 0 },
-    "active_hours_evening": { "start_h": 17, "start_m": 30, "end_h": 23, "end_m": 0 },
+
+    "active_hours_morning": {
+      "_uitleg": "Ochtendblok — bot is actief tussen start en end",
+      "start_h": 6, "start_m": 30,
+      "end_h": 12,  "end_m": 0
+    },
+    "active_hours_evening": {
+      "_uitleg": "Avondblok — bot is actief tussen start en end",
+      "start_h": 17, "start_m": 30,
+      "end_h": 23,   "end_m": 0
+    },
+
     "report_every_n_runs": 15,
+
     "slots": [
       {
+        "_uitleg": "Tijdslot ochtend. hour_start/end bepalen wanneer dit slot actief is.",
         "hour_start": 6,  "hour_end": 12,
-        "comment": "Ochtend 6:30-12u — elke 5 min",
         "options": [
-          { "time_option": 300, "weight": 100 }
+          {
+            "_uitleg": "time_option = cooldown in seconden (600=10min, 2400=40min, 10800=3u, 28800=8u). weight = kans in %.",
+            "time_option": 600, "weight": 100
+          }
         ],
-        "interval_minutes": 5,
-        "jitter_minutes": 1
+        "interval_minutes": 10,
+        "jitter_minutes": 2
       },
       {
+        "_uitleg": "Tijdslot avond",
         "hour_start": 17, "hour_end": 23,
-        "comment": "Avond 17:30-23u — elke 5 min",
         "options": [
-          { "time_option": 300, "weight": 100 }
+          { "time_option": 600, "weight": 100 }
         ],
-        "interval_minutes": 5,
-        "jitter_minutes": 1
+        "interval_minutes": 10,
+        "jitter_minutes": 2
       }
-    ]
+    ],
+
+    "extra_break": {
+      "_uitleg": "Kans op een extra willekeurige pauze per ronde (anti-detectie)",
+      "enabled": true,
+      "chance": 0.10,
+      "min_minutes": 5,
+      "max_minutes": 10
+    }
   },
+
+  "captcha": {
+    "_uitleg": "Wat te doen bij een CAPTCHA-detectie",
+    "pause_minutes": 45
+  },
+
+  "session": {
+    "_uitleg": "Sessie-instellingen",
+    "refresh_every_hours": 6
+  },
+
   "email": {
+    "_uitleg": "E-mailinstellingen. Adres wordt geladen via SMTP_TO GitHub Secret.",
     "enabled": true,
     "to": "JOUW_EMAIL",
     "smtp_host": "smtp.gmail.com",
