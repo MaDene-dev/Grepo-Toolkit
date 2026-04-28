@@ -22,8 +22,19 @@ jobs:
       - name: Dependencies installeren
         run: npm install --omit=dev
 
-      - name: Cookies wegschrijven
-        run: echo '${{ secrets.GREPO_COOKIES }}' > cookies.json
+      - name: Chromium installeren (voor Puppeteer)
+        run: npx puppeteer browsers install chrome
+
+      - name: Cookies wegschrijven (als secret beschikbaar)
+        run: |
+          if [ -n "$GREPO_COOKIES" ]; then
+            echo "$GREPO_COOKIES" > cookies.json
+            echo "Cookies geladen uit secret."
+          else
+            echo "Geen GREPO_COOKIES secret — bot logt automatisch in via Puppeteer."
+          fi
+        env:
+          GREPO_COOKIES: ${{ secrets.GREPO_COOKIES }}
 
       - name: Bot starten
         env:
