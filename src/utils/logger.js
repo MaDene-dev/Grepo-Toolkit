@@ -1,11 +1,20 @@
 const winston = require("winston");
 
+// Geef altijd de Belgische tijd weer (UTC+1 winter, UTC+2 zomer)
+const nlTimestamp = () => {
+  return new Date().toLocaleString("nl-BE", {
+    timeZone: "Europe/Brussels",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false,
+  });
+};
+
 const logger = winston.createLogger({
   level: "info",
   format: winston.format.combine(
-    winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
-    winston.format.printf(({ timestamp, level, message }) => {
-      return `[${timestamp}] [${level.toUpperCase()}] ${message}`;
+    winston.format.printf(({ level, message }) => {
+      return `[${nlTimestamp()}] [${level.toUpperCase()}] ${message}`;
     })
   ),
   transports: [
