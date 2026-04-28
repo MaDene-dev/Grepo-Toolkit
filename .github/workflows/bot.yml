@@ -22,8 +22,8 @@ jobs:
       - name: Dependencies installeren
         run: npm install
 
-      - name: Chromium installeren
-        run: node -e "require('puppeteer').executablePath()" || npx puppeteer browsers install chrome
+      - name: Chromium installeren voor Puppeteer
+        run: node node_modules/puppeteer/install.mjs || node -e "const p = require('puppeteer'); p.executablePath && console.log('ok')"
 
       - name: Bot starten
         env:
