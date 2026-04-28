@@ -140,7 +140,7 @@ class Autofarm {
     const delay = this._calcDelay(slot);
     this.nextRunAt = new Date(Date.now() + delay);
     const rondesLeft = this._estimateRoundsLeft(slot);
-    logger.info(`[Autofarm] Volgende ophaling: ${this.nextRunAt.toLocaleTimeString("nl-BE", {hour:"2-digit",minute:"2-digit"})} | nog ~${rondesLeft} rondes in dit blok`);
+    logger.info(`[Autofarm] Volgende ophaling: ${this.nextRunAt.toLocaleTimeString("nl-BE", {hour:"2-digit",minute:"2-digit",second:"2-digit"})} | nog ~${rondesLeft} rondes in dit blok`);
     this.timer = setTimeout(() => this.run(), delay);
   }
 
