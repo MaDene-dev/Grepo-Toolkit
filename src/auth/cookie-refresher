@@ -43,145 +43,87 @@ async function refreshCookies(config) {
       }
     });
 
-    // Stap 1: Portaal laden
+    // Stap 1: Login via nl-play portaal (React SPA)
     logger.info(`[CookieRefresher] Portaal laden: ${portalUrl}`);
     await page.goto(portalUrl, { waitUntil: "networkidle2", timeout: 30000 });
-    logger.info(`[CookieRefresher] URL: ${page.url()} | ${(await page.content()).length} bytes`);
 
-    // Stap 2: Vul in via de React IDs (niet via name-attributen)
-    logger.info("[CookieRefresher] Invullen via React input IDs...");
     await page.waitForSelector("#page_login_always-visible_input_player-identifier", { timeout: 15000 });
-
     await page.click("#page_login_always-visible_input_player-identifier", { clickCount: 3 });
     await page.type("#page_login_always-visible_input_player-identifier", username, { delay: 50 });
-
     await page.click("#page_login_always-visible_input_password");
     await page.type("#page_login_always-visible_input_password", password, { delay: 50 });
 
-    logger.info("[CookieRefresher] Velden ingevuld, login knop zoeken...");
-
-    // Stap 3: Klik de "Inloggen" knop (React button, niet form submit)
-    const loginBtnClicked = await page.evaluate(() => {
-      const buttons = Array.from(document.querySelectorAll("button, a.button, [type='submit']"));
-      const loginBtn = buttons.find(b =>
-        b.textContent?.trim().toLowerCase().includes("inloggen") ||
-        b.textContent?.trim().toLowerCase().includes("login") ||
-        b.textContent?.trim().toLowerCase().includes("aanmelden")
-      );
-      if (loginBtn) {
-        loginBtn.click();
-        return loginBtn.textContent?.trim();
-      }
+    // Klik de Inloggen knop
+    const loginBtnText = await page.evaluate(() => {
+      const btn = Array.from(document.querySelectorAll("button, a.button, [type='submit']"))
+        .find(b => ["inloggen","login","aanmelden"].includes(b.textContent?.trim().toLowerCase()));
+      if (btn) { btn.click(); return btn.textContent?.trim(); }
       return null;
     });
-    logger.info(`[CookieRefresher] Login knop geklikt: "${loginBtnClicked ?? "niet gevonden"}"`);
+    logger.info(`[CookieRefresher] Login knop geklikt: "${loginBtnText}"`);
 
-    // Wacht op navigatie na login
+    await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 30000 }).catch(() => {});
+    await new Promise(r => setTimeout(r, 3000));
+    logger.info(`[CookieRefresher] URL na login: ${page.url()} | ${(await page.content()).length} bytes`);
+
+    // Stap 2: Navigeer naar nl0/start/index om de traditionele wereldkeuze te krijgen
+    const indexUrl = `https://${lang}0.grepolis.com/start/index`;
+    logger.info(`[CookieRefresher] Wereldkeuze laden: ${indexUrl}`);
+    await page.goto(indexUrl, { waitUntil: "networkidle2", timeout: 30000 });
+    await new Promise(r => setTimeout(r, 2000));
+    logger.info(`[CookieRefresher] Index URL: ${page.url()} | ${(await page.content()).length} bytes`);
+
+    // Stap 3: De form heeft action="login_to_game_world" en een leeg "world" veld
+    // Wij zetten world=nl133 en submitten direct — geen knop klikken nodig
+    logger.info(`[CookieRefresher] Form invullen met world=${world} en submitten...`);
+
+    const formResult = await page.evaluate((world) => {
+      const form = document.querySelector('form[action*="login_to_game_world"]');
+      if (!form) return "GEEN FORM GEVONDEN met action=login_to_game_world";
+
+      // Zet het world veld
+      let worldInput = form.querySelector('input[name="world"]');
+      if (!worldInput) {
+        worldInput = document.createElement("input");
+        worldInput.type = "hidden";
+        worldInput.name = "world";
+        form.appendChild(worldInput);
+      }
+      worldInput.value = world;
+
+      // Submit de form
+      form.submit();
+      return `OK: world=${world} ingesteld, form.submit() uitgevoerd`;
+    }, world);
+
+    logger.info(`[CookieRefresher] Form result: ${formResult}`);
+
+    // Wacht op de redirect naar de game
     await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 30000 }).catch(() => {});
     await new Promise(r => setTimeout(r, 4000));
 
-    logger.info(`[CookieRefresher] URL na login: ${page.url()} | ${(await page.content()).length} bytes`);
+    logger.info(`[CookieRefresher] URL na form submit: ${page.url()} | ${(await page.content()).length} bytes`);
 
-    // Log alle cookies na login
-    const cookiesNaLogin = await page.cookies();
-    logger.info(`[CookieRefresher] Cookies: ${cookiesNaLogin.map(c => `${c.name}(${c.domain})`).join(", ")}`);
-
-    // Stap 4: Wacht op wereldkeuze — React laadt dit asynchroon
-    // Zoek de wereld-knop of link
-    // Na login: navigeer expliciet naar de wereldkeuze-pagina
-    const indexUrl = `https://${lang}0.grepolis.com/start/index`;
-    if (!page.url().includes("start/index")) {
-      logger.info(`[CookieRefresher] Navigeren naar wereldkeuze: ${indexUrl}`);
-      await page.goto(indexUrl, { waitUntil: "networkidle2", timeout: 30000 });
-      await new Promise(r => setTimeout(r, 2000));
-    }
-    logger.info(`[CookieRefresher] Na login URL: ${page.url()} | ${(await page.content()).length} bytes`);
-
-    // Dump alle links, forms en knoppen op de pagina
-    const pageStructuur = await page.evaluate((world) => {
-      const result = {
-        url: window.location.href,
-        alle_links: Array.from(document.querySelectorAll("a[href]"))
-          .map(a => ({ text: a.textContent?.trim().substring(0,40), href: a.href, onclick: a.getAttribute("onclick") }))
-          .slice(0, 50),
-        alle_forms: Array.from(document.querySelectorAll("form"))
-          .map(f => ({ action: f.action, method: f.method, inputs: Array.from(f.querySelectorAll("input,button")).map(i => ({ type: i.type, name: i.name, value: i.value?.substring(0,30), text: i.textContent?.trim().substring(0,30) })) })),
-        alle_knoppen: Array.from(document.querySelectorAll("button, input[type=button], input[type=submit], a.button"))
-          .map(b => ({ text: b.textContent?.trim().substring(0,40), onclick: b.getAttribute("onclick"), href: b.href })),
-        world_elementen: Array.from(document.querySelectorAll("*"))
-          .filter(el => el.textContent?.includes(world) || el.getAttribute("data-uni") === world || el.href?.includes(world))
-          .map(el => ({ tag: el.tagName, text: el.textContent?.trim().substring(0,40), href: el.href, onclick: el.getAttribute("onclick"), dataUni: el.getAttribute("data-uni"), id: el.id, cls: el.className?.substring(0,40) }))
-          .slice(0, 20),
-      };
-      return result;
-    }, world);
-
-    logger.info(`[CookieRefresher] Pagina URL: ${pageStructuur.url}`);
-    logger.info(`[CookieRefresher] World-elementen (${pageStructuur.world_elementen.length}):`);
-    pageStructuur.world_elementen.forEach(e => logger.info(`  [${e.tag}] text="${e.text}" href="${e.href}" onclick="${e.onclick}" data-uni="${e.dataUni}" id="${e.id}" class="${e.cls}"`));
-    logger.info(`[CookieRefresher] Alle forms (${pageStructuur.alle_forms.length}):`);
-    pageStructuur.alle_forms.forEach(f => logger.info(`  form action="${f.action}" method="${f.method}" inputs=${JSON.stringify(f.inputs)}`));
-    logger.info(`[CookieRefresher] Alle knoppen (${pageStructuur.alle_knoppen.length}):`);
-    pageStructuur.alle_knoppen.forEach(b => logger.info(`  knop text="${b.text}" onclick="${b.onclick}" href="${b.href}"`));
-    logger.info(`[CookieRefresher] Alle links met "spelen/play/133":`);
-    pageStructuur.alle_links
-      .filter(l => l.text?.toLowerCase().includes("spel") || l.text?.toLowerCase().includes("play") || l.href?.includes("133"))
-      .forEach(l => logger.info(`  link text="${l.text}" href="${l.href}" onclick="${l.onclick}"`));
-
-    // Log de volledige HTML van het wereldkeuze-blok
-    const worldBoxHtml = await page.evaluate(() => {
-      // Zoek het element dat "Kies je wereld" bevat
-      const all = Array.from(document.querySelectorAll("*"));
-      const box = all.find(el => el.textContent?.includes("Kies je wereld") && el.children?.length > 0);
-      return box ? box.outerHTML.substring(0, 3000) : "Niet gevonden";
-    });
-    logger.info(`[CookieRefresher] Wereldkeuze HTML:
-${worldBoxHtml}`);
-
-    // Probeer nu te klikken op de eerste wereld-knop (ongeacht naam)
-    // en intercept de redirect URL
-    const worldBtnResult = await page.evaluate((world) => {
-      // Zoek alle klikbare elementen
-      const all = Array.from(document.querySelectorAll("a, button, input[type=submit], input[type=button]"));
-      // Geef ALLES terug zodat we kunnen zien wat er is
-      return all.map(el => ({
-        tag:     el.tagName,
-        text:    el.textContent?.trim().substring(0, 30),
-        href:    el.href || "",
-        value:   el.value || "",
-        onclick: el.getAttribute("onclick") || "",
-        name:    el.name || "",
-        id:      el.id || "",
-        cls:     el.className?.substring(0, 50) || "",
-      })).filter(el => el.text || el.href || el.value);
-    }, world);
-
-    logger.info(`[CookieRefresher] Alle klikbare elementen (${worldBtnResult.length}):`);
-    worldBtnResult.forEach(el => logger.info(`  [${el.tag}] text="${el.text}" href="${el.href}" value="${el.value}" onclick="${el.onclick}" class="${el.cls}"`));
-
-    let worldClicked = false;
-
-    // Wacht op login-redirect
+    // Wacht nog even op de login-redirect URL (wordt onderschept via listener)
     let waited = 0;
-    while (!loginRedirectUrl && waited < 20) {
+    while (!loginRedirectUrl && waited < 10) {
       await new Promise(r => setTimeout(r, 1000));
       waited++;
     }
-
     logger.info(`[CookieRefresher] Login redirect: ${loginRedirectUrl ?? "niet onderschept"}`);
 
-    if (loginRedirectUrl) {
+    // Als er een login redirect was, navigeer ernaar voor de volledige game-sessie
+    if (loginRedirectUrl && !page.url().includes(`${world}.grepolis.com/game/${world}`)) {
       await page.goto(loginRedirectUrl, { waitUntil: "networkidle2", timeout: 30000 });
       await new Promise(r => setTimeout(r, 4000));
-    } else {
-      const gameUrl = `https://${world}.grepolis.com/game/${world}`;
-      await page.goto(gameUrl, { waitUntil: "networkidle2", timeout: 30000 });
-      await new Promise(r => setTimeout(r, 4000));
+      logger.info(`[CookieRefresher] Na redirect: ${page.url()} | ${(await page.content()).length} bytes`);
     }
 
     const finalContent = await page.content();
-    logger.info(`[CookieRefresher] Eindpagina: ${finalContent.length} bytes | ${page.url()}`);
+    const finalUrl = page.url();
+    logger.info(`[CookieRefresher] Eindpagina: ${finalContent.length} bytes | ${finalUrl}`);
 
+    // Cookies ophalen van alle domeinen
     const cookies = await page.cookies(
       `https://${world}.grepolis.com`,
       portalUrl,
@@ -191,7 +133,7 @@ ${worldBoxHtml}`);
     logger.info(`[CookieRefresher] ${cookies.length} cookies: ${cookies.map(c => c.name).join(", ")}`);
 
     if (finalContent.length < 50000) {
-      throw new Error(`Pagina te klein (${finalContent.length} bytes) — login mislukt.`);
+      throw new Error(`Pagina te klein (${finalContent.length} bytes) — login mislukt. URL: ${finalUrl}`);
     }
 
     const cookieData = cookies.map(c => ({
