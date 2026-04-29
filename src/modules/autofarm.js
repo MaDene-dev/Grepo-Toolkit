@@ -1,4 +1,4 @@
-const logger = require("../utils/logger");
+Aconst logger = require("../utils/logger");
 
 class Autofarm {
   constructor(api, config, mailer) {
@@ -210,16 +210,24 @@ class Autofarm {
         } else {
           this._recovering = true;
           logger.warn(`[Autofarm] Sessie verlopen — herlogin via Puppeteer...`);
+          let herstelOk = false;
           try {
             await this.api.session.login();
-            logger.info(`[Autofarm] Sessie hersteld! Volgende ronde over ~1 minuut.`);
+            herstelOk = true;
+            logger.info(`[Autofarm] Sessie hersteld!`);
           } catch (loginErr) {
             logger.error(`[Autofarm] Herverbinden mislukt: ${loginErr.message}`);
             this.stats.failedRuns++;
           }
-          // Altijd recovering resetten en gewoon volgende ronde inplannen
-          // Nooit recursief run() aanroepen — dat veroorzaakt de loop
           this._recovering = false;
+
+          // Na herstel: plan een snelle ronde in (1 min) zodat meteen gefarmd wordt
+          if (herstelOk) {
+            logger.info(`[Autofarm] Snelle ronde ingepland over 1 minuut.`);
+            if (this.timer) clearTimeout(this.timer);
+            this.timer = setTimeout(() => this.run(), 60_000);
+            return; // Sla de normale _schedule() hieronder over
+          }
         }
       } else {
         this.stats.failedRuns++;
