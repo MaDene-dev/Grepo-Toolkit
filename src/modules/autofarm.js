@@ -74,15 +74,19 @@ class Autofarm {
   }
 
   _calcDelay(blok) {
+    // Minimumgrens = game cooldown (time_option) + 30 seconden buffer
+    const minDelay = blok.interval.time_option * 1000 + 30_000;
+
     const base   = blok.interval.interval_minutes * 60 * 1000;
-    const jitter = (Math.random() * 2 - 1) * blok.interval.jitter_minutes * 60 * 1000;
+    // Jitter is altijd positief — we wachten nooit minder dan de cooldown
+    const jitter = Math.random() * blok.interval.jitter_minutes * 60 * 1000;
     const kans   = this.opties.extra_pauze_kans ?? 0.10;
     const minMin = this.opties.extra_pauze_min_min ?? 5;
     const maxMin = this.opties.extra_pauze_max_min ?? 10;
     const extra  = Math.random() < kans
       ? (minMin + Math.random() * (maxMin - minMin)) * 60 * 1000 : 0;
     if (extra > 0) logger.info(`[Autofarm] Extra pauze ingebouwd (~${Math.round(extra/60000)} min)`);
-    return Math.max(60_000, base + jitter + extra);
+    return Math.max(minDelay, base + jitter + extra);
   }
 
   start() {
