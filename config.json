@@ -23,7 +23,7 @@
     "active_hours_morning": {
       "_uitleg": "Ochtendblok — bot is actief tussen start en end",
       "start_h": 6, "start_m": 30,
-      "end_h": 12,  "end_m": 0
+      "end_h": 17,  "end_m": 0
     },
     "active_hours_evening": {
       "_uitleg": "Avondblok — bot is actief tussen start en end",
