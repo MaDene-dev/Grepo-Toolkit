@@ -217,12 +217,23 @@ class Session {
     }
   }
 
+  // Controleer of een response aangeeft dat de sessie verlopen is
+  _isSessionExpired(res) {
+    const data = res.data;
+    const url  = res.request?.res?.responseUrl ?? "";
+    if (url.includes("login=1") || url.includes("nosession")) return true;
+    if (typeof data === "string" && data.length < 10000 && data.includes("login")) return true;
+    if (data?.error === "not_logged_in" || data?.error === "session_expired") return true;
+    return false;
+  }
+
   async gameGet(endpoint, townId, action, jsonPayload = null) {
     const params = new URLSearchParams({ town_id: townId, action, h: this.csrfToken, _: Date.now() });
     if (jsonPayload) params.set("json", jsonPayload);
     const res = await this.client.get(`${this.baseUrl}/game/${endpoint}?${params}`, {
       headers: { ...this._headers(this.baseUrl), "X-Requested-With": "XMLHttpRequest", Accept: "application/json, */*" },
     });
+    if (this._isSessionExpired(res)) throw new Error("SESSION_EXPIRED");
     return res.data?.json ?? res.data;
   }
 
@@ -233,6 +244,7 @@ class Session {
     const res = await this.client.post(`${this.baseUrl}/game/${endpoint}?${params}`, formData.toString(), {
       headers: { ...this._headers(this.baseUrl), "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "X-Requested-With": "XMLHttpRequest", Accept: "application/json, */*" },
     });
+    if (this._isSessionExpired(res)) throw new Error("SESSION_EXPIRED");
     return res.data?.json ?? res.data;
   }
 
