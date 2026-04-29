@@ -6,10 +6,42 @@ class GrepolisAPI {
   }
 
   async getTowns() {
+    // Probeer steden uit de HTML te halen (dynamisch)
+    const html = this.session.lastHtml;
+    if (html) {
+      const towns = this._parseTownsFromHtml(html);
+      if (towns.length > 0) {
+        return towns;
+      }
+    }
+    // Fallback: steden uit config.json
     if (this.session.config.account.towns?.length > 0) {
       return this.session.config.account.towns;
     }
-    throw new Error("Geen steden in config.json gevonden.");
+    throw new Error("Geen steden gevonden. Voeg ze toe aan config.json.");
+  }
+
+  _parseTownsFromHtml(html) {
+    const towns = [];
+    // Grepolis stopt town-data in de HTML als JSON objecten
+    const pattern = /\{"id"\s*:\s*(\d+)\s*,\s*"name"\s*:\s*"([^"]+)"[^}]*?"island_x"\s*:\s*(\d+)[^}]*?"island_y"\s*:\s*(\d+)/g;
+    let match;
+    while ((match = pattern.exec(html)) !== null) {
+      const town = {
+        id:       parseInt(match[1]),
+        name:     match[2],
+        island_x: parseInt(match[3]),
+        island_y: parseInt(match[4]),
+      };
+      // Dedupliceer op basis van id
+      if (!towns.find(t => t.id === town.id)) {
+        towns.push(town);
+      }
+    }
+    if (towns.length > 0) {
+      logger.info(`[API] ${towns.length} steden gevonden in HTML: ${towns.map(t => t.name).join(", ")}`);
+    }
+    return towns;
   }
 
   async getFarmOverview(town) {
