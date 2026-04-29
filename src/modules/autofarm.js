@@ -202,10 +202,18 @@ class Autofarm {
 
     } catch (err) {
       if (err.message === "SESSION_EXPIRED") {
-        logger.warn(`[Autofarm] Sessie verlopen (GSM-login?), nieuwe sessie ophalen...`);
+        logger.warn(`[Autofarm] Sessie verlopen (GSM-login?), probeer te herverbinden...`);
         try {
-          await this.api.session.login();
-          logger.info(`[Autofarm] Sessie vernieuwd! Ronde wordt opnieuw ingepland.`);
+          // Stap 1: Probeer gewoon de CSRF token te vernieuwen (snel)
+          const csrfOk = await this.api.session.refreshCsrf();
+          if (csrfOk) {
+            logger.info(`[Autofarm] CSRF vernieuwd — sessie hersteld!`);
+          } else {
+            // Stap 2: Volledige herlogin via Puppeteer
+            logger.info(`[Autofarm] CSRF mislukt, volledige herlogin starten...`);
+            await this.api.session.login();
+            logger.info(`[Autofarm] Sessie volledig vernieuwd via Puppeteer!`);
+          }
         } catch (loginErr) {
           logger.error(`[Autofarm] Herverbinden mislukt: ${loginErr.message}`);
           this.stats.failedRuns++;
