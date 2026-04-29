@@ -43,16 +43,33 @@ class Session {
       await this._loadCookies();
       const ok = await this._verifyAndExtract();
       if (ok) {
-        // Sla remember-me token op voor volgende keer
         this._saveRememberToken();
         return;
       }
       logger.warn("Cookies verlopen of ongeldig.");
     }
 
+    // Stap 3: Automatisch inloggen via Puppeteer
+    if (process.env.GREPO_EMAIL && process.env.GREPO_PASSWORD) {
+      logger.info("Puppeteer automatisch inloggen starten...");
+      try {
+        const { refreshCookies } = require("./cookie-refresher");
+        await refreshCookies(this.config);
+        await this._loadCookies();
+        const ok = await this._verifyAndExtract();
+        if (ok) {
+          this._saveRememberToken();
+          logger.info("Automatische login via Puppeteer geslaagd!");
+          return;
+        }
+      } catch (err) {
+        logger.warn(`Puppeteer login mislukt: ${err.message}`);
+      }
+    }
+
     throw new Error(
-      "Kan niet inloggen. Exporteer cookies via Cookie-Editor en update de GREPO_COOKIES secret, " +
-      "of stel GREPO_REMEMBER_TOKEN in als GitHub Secret."
+      "Kan niet inloggen via cookies, token of Puppeteer. " +
+      "Exporteer cookies handmatig via Cookie-Editor en update de GREPO_COOKIES secret."
     );
   }
 
@@ -84,6 +101,13 @@ class Session {
       );
 
       logger.info(`Game pagina: ${gameRes.status} | ${gameRes.data.length} bytes`);
+
+      // Debug: welke cookies hebben we na remember-me poging?
+      const gc = await this.jar.getCookies(this.baseUrl);
+      const pc = await this.jar.getCookies(this.portalUrl);
+      logger.info(`Game cookies: ${gc.map(c => c.key).join(", ") || "geen"}`);
+      logger.info(`Portal cookies: ${pc.map(c => c.key).join(", ") || "geen"}`);
+
       this.lastHtml = gameRes.data;
       this._extractCsrf(gameRes.data);
 
@@ -134,6 +158,19 @@ class Session {
 
     const raw = JSON.parse(fs.readFileSync(COOKIES_FILE, "utf8"));
     logger.info(`${raw.length} cookies geladen uit cookies.json`);
+
+    // Log vervaldatum van kritieke cookies
+    const now = Date.now() / 1000;
+    for (const c of raw) {
+      if (["sid", "nl-interop-rememberme"].includes(c.name)) {
+        if (c.expirationDate) {
+          const daysLeft = Math.round((c.expirationDate - now) / 86400);
+          logger.info(`Cookie '${c.name}': verloopt over ${daysLeft} dagen`);
+        } else if (c.session) {
+          logger.warn(`Cookie '${c.name}': SESSION cookie — verloopt bij afsluiten browser!`);
+        }
+      }
+    }
 
     for (const c of raw) {
       const domain = (c.domain ?? `${this.world}.grepolis.com`).replace(/^\./, "");
