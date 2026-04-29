@@ -203,7 +203,7 @@ class Autofarm {
     } catch (err) {
       if (err.message === "SESSION_EXPIRED") {
         if (this._recovering) {
-          // Al bezig met herstel maar nog steeds fout — geef op, plan volgende ronde
+          // Al bezig met herstel maar nog steeds fout — geef op
           logger.error(`[Autofarm] Herstel mislukt — volgende ronde ingepland.`);
           this._recovering = false;
           this.stats.failedRuns++;
@@ -212,17 +212,14 @@ class Autofarm {
           logger.warn(`[Autofarm] Sessie verlopen — herlogin via Puppeteer...`);
           try {
             await this.api.session.login();
-            logger.info(`[Autofarm] Sessie hersteld! Ronde opnieuw uitvoeren...`);
-            // Reset recovering VOOR we run() aanroepen
-            this._recovering = false;
-            await this._sleep(2000); // Kleine pauze voor stabiliteit
-            await this.run();
-            return; // run() plant de volgende ronde zelf in
+            logger.info(`[Autofarm] Sessie hersteld! Volgende ronde over ~1 minuut.`);
           } catch (loginErr) {
             logger.error(`[Autofarm] Herverbinden mislukt: ${loginErr.message}`);
-            this._recovering = false;
             this.stats.failedRuns++;
           }
+          // Altijd recovering resetten en gewoon volgende ronde inplannen
+          // Nooit recursief run() aanroepen — dat veroorzaakt de loop
+          this._recovering = false;
         }
       } else {
         this.stats.failedRuns++;
