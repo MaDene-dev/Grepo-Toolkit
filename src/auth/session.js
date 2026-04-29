@@ -197,6 +197,13 @@ class Session {
       headers: this._headers(this.portalUrl),
     });
     logger.info(`Status: ${res.status} | Grootte: ${res.data.length} bytes`);
+
+    // De echte gamepagina is >200KB — kleinere pagina = wereldkeuze of loginpagina
+    if (res.data.length < 200000) {
+      logger.warn(`Pagina te klein (${res.data.length} bytes) — geen echte game sessie. Puppeteer nodig.`);
+      return false;
+    }
+
     this.lastHtml = res.data;
     this._extractCsrf(res.data);
     if (this.csrfToken) {
