@@ -70,6 +70,14 @@ class GrepolisAPI {
     const owned    = farmList.filter(v => v.rel === 1);
     const ready    = owned.filter(v => !v.loot || v.loot < now);
 
+    // Als er 0 eigen dorpen zijn maar de response ziet er geldig uit,
+    // kan dit betekenen dat de sessie verlopen is zonder foutcode.
+    // Controleer de sessie door te kijken of farm_town_list überhaupt aanwezig is.
+    if (owned.length === 0 && !data?.farm_town_list) {
+      logger.warn(`[API] Lege response voor ${town.name} — mogelijk verlopen sessie`);
+      throw new Error("SESSION_EXPIRED");
+    }
+
     logger.info(`[API] ${owned.length} eigen dorpen, ${ready.length} klaar`);
     return { owned, ready };
   }
