@@ -201,24 +201,29 @@ class Autofarm {
       }
 
     } catch (err) {
-      if (err.message === "SESSION_EXPIRED" && !this._recovering) {
-        this._recovering = true;
-        logger.warn(`[Autofarm] Sessie verlopen — volledige herlogin via Puppeteer...`);
-        try {
-          await this.api.session.login();
-          logger.info(`[Autofarm] Sessie hersteld! Ronde opnieuw uitvoeren...`);
+      if (err.message === "SESSION_EXPIRED") {
+        if (this._recovering) {
+          // Al bezig met herstel maar nog steeds fout — geef op, plan volgende ronde
+          logger.error(`[Autofarm] Herstel mislukt — volgende ronde ingepland.`);
           this._recovering = false;
-          await this.run();
-          return;
-        } catch (loginErr) {
-          logger.error(`[Autofarm] Herverbinden mislukt: ${loginErr.message}`);
           this.stats.failedRuns++;
-          this._recovering = false;
+        } else {
+          this._recovering = true;
+          logger.warn(`[Autofarm] Sessie verlopen — herlogin via Puppeteer...`);
+          try {
+            await this.api.session.login();
+            logger.info(`[Autofarm] Sessie hersteld! Ronde opnieuw uitvoeren...`);
+            // Reset recovering VOOR we run() aanroepen
+            this._recovering = false;
+            await this._sleep(2000); // Kleine pauze voor stabiliteit
+            await this.run();
+            return; // run() plant de volgende ronde zelf in
+          } catch (loginErr) {
+            logger.error(`[Autofarm] Herverbinden mislukt: ${loginErr.message}`);
+            this._recovering = false;
+            this.stats.failedRuns++;
+          }
         }
-      } else if (err.message === "SESSION_EXPIRED" && this._recovering) {
-        logger.error(`[Autofarm] Sessie herstel mislukt na Puppeteer — volgende ronde ingepland.`);
-        this._recovering = false;
-        this.stats.failedRuns++;
       } else {
         this.stats.failedRuns++;
         logger.error(`[Autofarm] Fout ronde #${this.roundNum}: ${err.message}`);
