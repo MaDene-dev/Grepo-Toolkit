@@ -88,50 +88,78 @@ async function refreshCookies(config) {
 
     // Stap 4: Wacht op wereldkeuze — React laadt dit asynchroon
     // Zoek de wereld-knop of link
-    logger.info("[CookieRefresher] Wachten op wereldkeuze...");
-    let worldClicked = false;
-
-    for (let attempt = 0; attempt < 10; attempt++) {
+    // Na login: navigeer expliciet naar de wereldkeuze-pagina
+    const indexUrl = `https://${lang}0.grepolis.com/start/index`;
+    if (!page.url().includes("start/index")) {
+      logger.info(`[CookieRefresher] Navigeren naar wereldkeuze: ${indexUrl}`);
+      await page.goto(indexUrl, { waitUntil: "networkidle2", timeout: 30000 });
       await new Promise(r => setTimeout(r, 2000));
-
-      const result = await page.evaluate((world) => {
-        // Zoek alle links/knoppen
-        const all = Array.from(document.querySelectorAll("a, button, [role='button']"));
-
-        // Log wat er op de pagina staat
-        const grepLinks = all
-          .filter(el => el.href?.includes("grepolis") || el.textContent?.includes("133"))
-          .map(el => `[${el.tagName}] "${el.textContent?.trim().substring(0,30)}" href="${el.href?.substring(0,60)}"`)
-          .slice(0, 10);
-
-        // Zoek wereld-link
-        const worldLink = all.find(el =>
-          el.href?.includes(world + ".grepolis.com") &&
-          !el.href?.includes("world_settings") &&
-          !el.href?.includes("forum")
-        );
-
-        // Zoek "Spelen" knop
-        const playBtn = all.find(el =>
-          el.textContent?.trim().toLowerCase() === "spelen" ||
-          el.textContent?.trim().toLowerCase() === "play" ||
-          el.textContent?.trim().toLowerCase() === "speel nu"
-        );
-
-        if (worldLink) { worldLink.click(); return { clicked: worldLink.href, elements: grepLinks }; }
-        if (playBtn)   { playBtn.click();   return { clicked: playBtn.textContent?.trim(), elements: grepLinks }; }
-
-        return { clicked: null, elements: grepLinks };
-      }, world);
-
-      logger.info(`[CookieRefresher] Poging ${attempt+1} | Elementen: ${result.elements.join(" | ") || "leeg"}`);
-
-      if (result.clicked) {
-        logger.info(`[CookieRefresher] ✓ Geklikt: ${result.clicked}`);
-        worldClicked = true;
-        break;
-      }
     }
+    logger.info(`[CookieRefresher] Na login URL: ${page.url()} | ${(await page.content()).length} bytes`);
+
+    // Dump alle links, forms en knoppen op de pagina
+    const pageStructuur = await page.evaluate((world) => {
+      const result = {
+        url: window.location.href,
+        alle_links: Array.from(document.querySelectorAll("a[href]"))
+          .map(a => ({ text: a.textContent?.trim().substring(0,40), href: a.href, onclick: a.getAttribute("onclick") }))
+          .slice(0, 50),
+        alle_forms: Array.from(document.querySelectorAll("form"))
+          .map(f => ({ action: f.action, method: f.method, inputs: Array.from(f.querySelectorAll("input,button")).map(i => ({ type: i.type, name: i.name, value: i.value?.substring(0,30), text: i.textContent?.trim().substring(0,30) })) })),
+        alle_knoppen: Array.from(document.querySelectorAll("button, input[type=button], input[type=submit], a.button"))
+          .map(b => ({ text: b.textContent?.trim().substring(0,40), onclick: b.getAttribute("onclick"), href: b.href })),
+        world_elementen: Array.from(document.querySelectorAll("*"))
+          .filter(el => el.textContent?.includes(world) || el.getAttribute("data-uni") === world || el.href?.includes(world))
+          .map(el => ({ tag: el.tagName, text: el.textContent?.trim().substring(0,40), href: el.href, onclick: el.getAttribute("onclick"), dataUni: el.getAttribute("data-uni"), id: el.id, cls: el.className?.substring(0,40) }))
+          .slice(0, 20),
+      };
+      return result;
+    }, world);
+
+    logger.info(`[CookieRefresher] Pagina URL: ${pageStructuur.url}`);
+    logger.info(`[CookieRefresher] World-elementen (${pageStructuur.world_elementen.length}):`);
+    pageStructuur.world_elementen.forEach(e => logger.info(`  [${e.tag}] text="${e.text}" href="${e.href}" onclick="${e.onclick}" data-uni="${e.dataUni}" id="${e.id}" class="${e.cls}"`));
+    logger.info(`[CookieRefresher] Alle forms (${pageStructuur.alle_forms.length}):`);
+    pageStructuur.alle_forms.forEach(f => logger.info(`  form action="${f.action}" method="${f.method}" inputs=${JSON.stringify(f.inputs)}`));
+    logger.info(`[CookieRefresher] Alle knoppen (${pageStructuur.alle_knoppen.length}):`);
+    pageStructuur.alle_knoppen.forEach(b => logger.info(`  knop text="${b.text}" onclick="${b.onclick}" href="${b.href}"`));
+    logger.info(`[CookieRefresher] Alle links met "spelen/play/133":`);
+    pageStructuur.alle_links
+      .filter(l => l.text?.toLowerCase().includes("spel") || l.text?.toLowerCase().includes("play") || l.href?.includes("133"))
+      .forEach(l => logger.info(`  link text="${l.text}" href="${l.href}" onclick="${l.onclick}"`));
+
+    // Log de volledige HTML van het wereldkeuze-blok
+    const worldBoxHtml = await page.evaluate(() => {
+      // Zoek het element dat "Kies je wereld" bevat
+      const all = Array.from(document.querySelectorAll("*"));
+      const box = all.find(el => el.textContent?.includes("Kies je wereld") && el.children?.length > 0);
+      return box ? box.outerHTML.substring(0, 3000) : "Niet gevonden";
+    });
+    logger.info(`[CookieRefresher] Wereldkeuze HTML:
+${worldBoxHtml}`);
+
+    // Probeer nu te klikken op de eerste wereld-knop (ongeacht naam)
+    // en intercept de redirect URL
+    const worldBtnResult = await page.evaluate((world) => {
+      // Zoek alle klikbare elementen
+      const all = Array.from(document.querySelectorAll("a, button, input[type=submit], input[type=button]"));
+      // Geef ALLES terug zodat we kunnen zien wat er is
+      return all.map(el => ({
+        tag:     el.tagName,
+        text:    el.textContent?.trim().substring(0, 30),
+        href:    el.href || "",
+        value:   el.value || "",
+        onclick: el.getAttribute("onclick") || "",
+        name:    el.name || "",
+        id:      el.id || "",
+        cls:     el.className?.substring(0, 50) || "",
+      })).filter(el => el.text || el.href || el.value);
+    }, world);
+
+    logger.info(`[CookieRefresher] Alle klikbare elementen (${worldBtnResult.length}):`);
+    worldBtnResult.forEach(el => logger.info(`  [${el.tag}] text="${el.text}" href="${el.href}" value="${el.value}" onclick="${el.onclick}" class="${el.cls}"`));
+
+    let worldClicked = false;
 
     // Wacht op login-redirect
     let waited = 0;
