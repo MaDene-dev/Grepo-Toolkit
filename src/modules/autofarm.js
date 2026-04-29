@@ -201,9 +201,20 @@ class Autofarm {
       }
 
     } catch (err) {
-      this.stats.failedRuns++;
-      logger.error(`[Autofarm] Fout ronde #${this.roundNum}: ${err.message}`);
-      await this._handleCaptcha(err.message);
+      if (err.message === "SESSION_EXPIRED") {
+        logger.warn(`[Autofarm] Sessie verlopen (GSM-login?), nieuwe sessie ophalen...`);
+        try {
+          await this.api.session.login();
+          logger.info(`[Autofarm] Sessie vernieuwd! Ronde wordt opnieuw ingepland.`);
+        } catch (loginErr) {
+          logger.error(`[Autofarm] Herverbinden mislukt: ${loginErr.message}`);
+          this.stats.failedRuns++;
+        }
+      } else {
+        this.stats.failedRuns++;
+        logger.error(`[Autofarm] Fout ronde #${this.roundNum}: ${err.message}`);
+        await this._handleCaptcha(err.message);
+      }
     }
 
     this._schedule(blok);
@@ -217,6 +228,10 @@ class Autofarm {
       const result = await this.api.claimLoads(town, owned.map(v => v.id), timeOption);
       if (result) return { ...result, farms: ready.length };
     } catch (err) {
+      if (err.message === "SESSION_EXPIRED") {
+        logger.warn(`[Autofarm]   Sessie verlopen tijdens farm — automatisch herverbinden...`);
+        throw err; // Gooi door zodat run() het oppakt
+      }
       logger.error(`[Autofarm]   Fout bij ${town.name}: ${err.message}`);
       throw err;
     }
