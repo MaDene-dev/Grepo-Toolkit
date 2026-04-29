@@ -108,12 +108,18 @@ class Session {
       logger.info(`Game cookies: ${gc.map(c => c.key).join(", ") || "geen"}`);
       logger.info(`Portal cookies: ${pc.map(c => c.key).join(", ") || "geen"}`);
 
+      // Pagina moet >50KB zijn om echt ingelogd te zijn
+      if (gameRes.data.length < 50000) {
+        logger.warn(`Game pagina te klein (${gameRes.data.length} bytes) — remember-me mislukt`);
+        return false;
+      }
+
       this.lastHtml = gameRes.data;
       this._extractCsrf(gameRes.data);
 
       if (this.csrfToken) {
         logger.info("✓ Remember-me login geslaagd!");
-        this._saveRememberToken(); // vernieuw opgeslagen token
+        this._saveRememberToken();
         return true;
       }
       return false;
