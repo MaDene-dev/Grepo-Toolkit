@@ -2,7 +2,7 @@ const logger = require("../utils/logger");
 
 class GrepolisAPI {
   constructor(session) {
-    this.session = session;
+    this.session = session; // bewaar referentie voor session refresh
   }
 
   async getTowns() {
