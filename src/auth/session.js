@@ -5,7 +5,8 @@ const fs   = require("fs");
 const path = require("path");
 const logger = require("../utils/logger");
 
-const COOKIES_FILE = path.join(__dirname, "../../cookies.json");
+const COOKIES_FILE  = path.join(__dirname, "../../cookies.json");
+const REMEMBER_FILE = path.join(__dirname, "../../remember-token.json");
 
 class Session {
   constructor(config) {
@@ -20,35 +21,108 @@ class Session {
     this.world     = config.account.world;
     this.baseUrl   = `https://${this.world}.grepolis.com`;
     this.lastHtml  = null;
+
+    const lang = this.world.match(/^([a-z]+)/)?.[1] ?? "nl";
+    this.portalUrl = `https://${lang}-play.grepolis.com`;
   }
 
   async login() {
-    logger.info("Sessie opzetten via cookies...");
+    logger.info("Sessie opzetten...");
 
-    if (!fs.existsSync(COOKIES_FILE)) {
-      throw new Error(
-        "cookies.json niet gevonden! Exporteer cookies via Cookie-Editor en zet ze in de GREPO_COOKIES GitHub Secret."
-      );
+    // Stap 1: Probeer via remember-me token (snelst, geen cookies nodig)
+    const rememberToken = this._loadRememberToken();
+    if (rememberToken) {
+      logger.info("Remember-me token gevonden, probeer automatisch in te loggen...");
+      const ok = await this._loginWithRememberToken(rememberToken);
+      if (ok) return;
+      logger.warn("Remember-me login mislukt, val terug op cookies...");
     }
 
-    await this._loadCookies();
+    // Stap 2: Probeer via cookies.json
+    if (fs.existsSync(COOKIES_FILE)) {
+      await this._loadCookies();
+      const ok = await this._verifyAndExtract();
+      if (ok) {
+        // Sla remember-me token op voor volgende keer
+        this._saveRememberToken();
+        return;
+      }
+      logger.warn("Cookies verlopen of ongeldig.");
+    }
 
-    logger.info("Gamepagina laden...");
-    const res = await this.client.get(`${this.baseUrl}/game/${this.world}`, {
-      headers: this._headers(),
+    throw new Error(
+      "Kan niet inloggen. Exporteer cookies via Cookie-Editor en update de GREPO_COOKIES secret, " +
+      "of stel GREPO_REMEMBER_TOKEN in als GitHub Secret."
+    );
+  }
+
+  // Login via nl-interop-rememberme token
+  async _loginWithRememberToken(token) {
+    try {
+      this.jar    = new CookieJar();
+      this.client = wrapper(axios.create({
+        jar: this.jar, withCredentials: true,
+        maxRedirects: 10, validateStatus: s => s < 500,
+      }));
+
+      // Zet de remember-me cookie
+      const domain = "grepolis.com";
+      await this.jar.setCookie(new Cookie({
+        key: "nl-interop-rememberme", value: token,
+        domain, path: "/", secure: true, httpOnly: true,
+      }), `https://${domain}`);
+
+      // Laad de portaal-pagina — de remember-me cookie triggert auto-login
+      const portalRes = await this.client.get(`${this.portalUrl}/`, {
+        headers: this._headers(this.portalUrl),
+      });
+
+      // Navigeer naar de game — dit zet de sid cookie
+      const gameRes = await this.client.get(
+        `${this.baseUrl}/game/${this.world}`,
+        { headers: this._headers(this.portalUrl) }
+      );
+
+      logger.info(`Game pagina: ${gameRes.status} | ${gameRes.data.length} bytes`);
+      this.lastHtml = gameRes.data;
+      this._extractCsrf(gameRes.data);
+
+      if (this.csrfToken) {
+        logger.info("✓ Remember-me login geslaagd!");
+        this._saveRememberToken(); // vernieuw opgeslagen token
+        return true;
+      }
+      return false;
+    } catch (err) {
+      logger.warn(`Remember-me login fout: ${err.message}`);
+      return false;
+    }
+  }
+
+  _loadRememberToken() {
+    // Prioriteit: environment variable → bestand
+    if (process.env.GREPO_REMEMBER_TOKEN) {
+      return process.env.GREPO_REMEMBER_TOKEN;
+    }
+    if (fs.existsSync(REMEMBER_FILE)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(REMEMBER_FILE, "utf8"));
+        return data.token ?? null;
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  _saveRememberToken() {
+    // Haal de remember-me token uit de huidige cookie jar
+    this.jar.getCookiesSync("https://grepolis.com").forEach(c => {
+      if (c.key === "nl-interop-rememberme") {
+        try {
+          fs.writeFileSync(REMEMBER_FILE, JSON.stringify({ token: c.value, saved: new Date().toISOString() }));
+          logger.info("Remember-me token opgeslagen.");
+        } catch (_) {}
+      }
     });
-    logger.info(`Status: ${res.status} | Grootte: ${res.data.length} bytes`);
-    this.lastHtml = res.data;
-
-    this._extractCsrf(res.data);
-
-    if (!this.csrfToken) {
-      throw new Error(
-        "Geen CSRF-token gevonden. Cookies zijn verlopen — exporteer nieuwe cookies via Cookie-Editor en update de GREPO_COOKIES secret."
-      );
-    }
-
-    logger.info(`✓ Sessie OK | player_id: ${this.playerId} | csrf: ${this.csrfToken.substring(0, 8)}...`);
   }
 
   async _loadCookies() {
@@ -74,6 +148,21 @@ class Session {
     }
   }
 
+  async _verifyAndExtract() {
+    logger.info("Gamepagina laden...");
+    const res = await this.client.get(`${this.baseUrl}/game/${this.world}`, {
+      headers: this._headers(this.portalUrl),
+    });
+    logger.info(`Status: ${res.status} | Grootte: ${res.data.length} bytes`);
+    this.lastHtml = res.data;
+    this._extractCsrf(res.data);
+    if (this.csrfToken) {
+      logger.info(`✓ Sessie OK | player_id: ${this.playerId} | csrf: ${this.csrfToken.substring(0, 8)}...`);
+      return true;
+    }
+    return false;
+  }
+
   _extractCsrf(html) {
     const patterns = [
       /"csrfToken"\s*:\s*"([^"]{8,})"/,
@@ -95,7 +184,7 @@ class Session {
     const params = new URLSearchParams({ town_id: townId, action, h: this.csrfToken, _: Date.now() });
     if (jsonPayload) params.set("json", jsonPayload);
     const res = await this.client.get(`${this.baseUrl}/game/${endpoint}?${params}`, {
-      headers: { ...this._headers(), "X-Requested-With": "XMLHttpRequest", Accept: "application/json, */*" },
+      headers: { ...this._headers(this.baseUrl), "X-Requested-With": "XMLHttpRequest", Accept: "application/json, */*" },
     });
     return res.data?.json ?? res.data;
   }
@@ -105,17 +194,17 @@ class Session {
     const formData = new URLSearchParams();
     if (jsonPayload) formData.set("json", jsonPayload);
     const res = await this.client.post(`${this.baseUrl}/game/${endpoint}?${params}`, formData.toString(), {
-      headers: { ...this._headers(), "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "X-Requested-With": "XMLHttpRequest", Accept: "application/json, */*" },
+      headers: { ...this._headers(this.baseUrl), "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "X-Requested-With": "XMLHttpRequest", Accept: "application/json, */*" },
     });
     return res.data?.json ?? res.data;
   }
 
-  _headers() {
+  _headers(referer) {
     return {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
       "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       "Accept-Language": "nl-BE,nl;q=0.9,en;q=0.7",
-      "Referer": `${this.baseUrl}/game/${this.world}`,
+      "Referer": referer,
     };
   }
 }
