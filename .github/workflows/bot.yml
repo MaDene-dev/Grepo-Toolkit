@@ -23,7 +23,12 @@ jobs:
         run: npm install --omit=dev
 
       - name: Cookies wegschrijven
-        run: echo '${{ secrets.GREPO_COOKIES }}' > cookies.json
+        run: |
+          if [ -n "$GREPO_COOKIES" ]; then
+            echo "$GREPO_COOKIES" > cookies.json
+          fi
+        env:
+          GREPO_COOKIES: ${{ secrets.GREPO_COOKIES }}
 
       - name: Bot starten
         env:
@@ -32,4 +37,5 @@ jobs:
           SMTP_USER:      ${{ secrets.SMTP_USER }}
           SMTP_PASS:      ${{ secrets.SMTP_PASS }}
           SMTP_TO:        ${{ secrets.SMTP_TO }}
+          GREPO_REMEMBER_TOKEN: ${{ secrets.GREPO_REMEMBER_TOKEN }}
         run: node src/index.js
