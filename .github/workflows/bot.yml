@@ -2,7 +2,8 @@ name: Grepolis Bot
 
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "0 * * * *"    # Elk uur op het hele uur
+    - cron: "30 * * * *"   # Elk uur op het halve uur
   workflow_dispatch:
 
 jobs:
@@ -35,10 +36,10 @@ jobs:
 
       - name: Bot starten
         env:
-          GREPO_EMAIL:    ${{ secrets.GREPO_EMAIL }}
-          GREPO_PASSWORD: ${{ secrets.GREPO_PASSWORD }}
-          SMTP_USER:      ${{ secrets.SMTP_USER }}
-          SMTP_PASS:      ${{ secrets.SMTP_PASS }}
-          SMTP_TO:        ${{ secrets.SMTP_TO }}
+          GREPO_EMAIL:          ${{ secrets.GREPO_EMAIL }}
+          GREPO_PASSWORD:       ${{ secrets.GREPO_PASSWORD }}
           GREPO_REMEMBER_TOKEN: ${{ secrets.GREPO_REMEMBER_TOKEN }}
+          SMTP_USER:            ${{ secrets.SMTP_USER }}
+          SMTP_PASS:            ${{ secrets.SMTP_PASS }}
+          SMTP_TO:              ${{ secrets.SMTP_TO }}
         run: node src/index.js
