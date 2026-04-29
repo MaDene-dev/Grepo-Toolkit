@@ -207,13 +207,16 @@ class Autofarm {
           // Stap 1: Probeer gewoon de CSRF token te vernieuwen (snel)
           const csrfOk = await this.api.session.refreshCsrf();
           if (csrfOk) {
-            logger.info(`[Autofarm] CSRF vernieuwd — sessie hersteld!`);
+            logger.info(`[Autofarm] CSRF vernieuwd — sessie hersteld! Ronde opnieuw uitvoeren...`);
           } else {
             // Stap 2: Volledige herlogin via Puppeteer
             logger.info(`[Autofarm] CSRF mislukt, volledige herlogin starten...`);
             await this.api.session.login();
-            logger.info(`[Autofarm] Sessie volledig vernieuwd via Puppeteer!`);
+            logger.info(`[Autofarm] Sessie volledig vernieuwd via Puppeteer! Ronde opnieuw uitvoeren...`);
           }
+          // Voer de ronde meteen opnieuw uit na herstel
+          await this.run();
+          return; // Voorkom dubbele scheduling
         } catch (loginErr) {
           logger.error(`[Autofarm] Herverbinden mislukt: ${loginErr.message}`);
           this.stats.failedRuns++;
