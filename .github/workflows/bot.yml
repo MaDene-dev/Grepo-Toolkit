@@ -2,7 +2,7 @@ name: Grepolis Bot
 
 on:
   schedule:
-    - cron: "*/50 * * * *"
+    - cron: "*/30 * * * *"
   workflow_dispatch:
 
 jobs:
