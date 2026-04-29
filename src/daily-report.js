@@ -64,8 +64,8 @@ async function run() {
     `ℹ️  STATUS`,
     `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
     `  Bot draait normaal ✅`,
-    `  Schema: ${config.schedule.active_hours_morning.start_h}:${String(config.schedule.active_hours_morning.start_m).padStart(2,"0")}–${config.schedule.active_hours_morning.end_h}:00 / ${config.schedule.active_hours_evening.start_h}:${String(config.schedule.active_hours_evening.start_m).padStart(2,"0")}–${config.schedule.active_hours_evening.end_h}:00`,
-    `  Interval: ~${config.schedule.slots[0]?.interval_minutes ?? "?"} minuten`,
+    `  Actieve blokken: ${config.dagschema.blokken.filter(b => b.actief).map(b => `${b.van}–${b.tot}`).join(" | ")}`,
+    `  Blokken: ${config.dagschema.blokken.map(b => `${b.van}–${b.tot} → ${b.interval} (${config.intervals[b.interval]?.label})`).join(" | ")}`,
     ``,
     `Goedenavond! 🌙`,
   ].join("\n");
