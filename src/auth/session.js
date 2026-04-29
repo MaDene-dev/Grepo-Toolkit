@@ -224,6 +224,23 @@ class Session {
     if (url.includes("login=1") || url.includes("nosession")) return true;
     if (typeof data === "string" && data.length < 10000 && data.includes("login")) return true;
     if (data?.error === "not_logged_in" || data?.error === "session_expired") return true;
+    // Detecteer ook kleine HTML-responses die geen JSON zijn (= redirect naar login)
+    if (typeof data === "string" && data.length < 5000 && data.startsWith("<!")) return true;
+    return false;
+  }
+
+  // Vernieuw de CSRF token door de gamepagina opnieuw te laden
+  async refreshCsrf() {
+    logger.info("CSRF token vernieuwen...");
+    const res = await this.client.get(`${this.baseUrl}/game/${this.world}`, {
+      headers: this._headers(this.baseUrl),
+    });
+    this.lastHtml = res.data;
+    this._extractCsrf(res.data);
+    if (this.csrfToken) {
+      logger.info(`CSRF vernieuwd: ${this.csrfToken.substring(0, 8)}...`);
+      return true;
+    }
     return false;
   }
 
