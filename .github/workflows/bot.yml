@@ -20,7 +20,10 @@ jobs:
           node-version: "24"
 
       - name: Dependencies installeren
-        run: npm install --omit=dev
+        run: npm install
+
+      - name: Chromium installeren voor Puppeteer
+        run: node node_modules/puppeteer/install.mjs
 
       - name: Cookies wegschrijven
         run: |
