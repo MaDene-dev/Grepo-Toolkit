@@ -1,4 +1,4 @@
-Aconst logger = require("../utils/logger");
+const logger = require("../utils/logger");
 
 class Autofarm {
   constructor(api, config, mailer) {
