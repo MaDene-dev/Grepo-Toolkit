@@ -78,7 +78,7 @@ async function boot() {
         await mailer.send("⚠️ Sessie verlopen", `Fout: ${err.message}\n\nUpdate je cookies op GitHub.`);
         setTimeout(boot, RETRY_DELAY_MS);
       }
-    }, (config.session?.refresh_every_hours ?? 6) * 60 * 60 * 1000);
+    }, (config.opties?.sessie_refresh_uren ?? 6) * 60 * 60 * 1000);
   }
 }
 
