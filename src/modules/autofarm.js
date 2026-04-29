@@ -240,10 +240,14 @@ class Autofarm {
   async _handleCaptcha(message) {
     if (!message?.toLowerCase().match(/captcha|robot|verificat|beveil/)) return;
     logger.error("[Autofarm] 🚨 CAPTCHA gedetecteerd!");
-    await this.mailer.send(
-      "🚨 CAPTCHA gedetecteerd — actie vereist!",
-      `Tijdstip: ${new Date().toLocaleString("nl-BE")}\nWereld: ${this.world.toUpperCase()}\n\nLos de CAPTCHA op in je browser.\nDe bot herstart automatisch na 45 minuten.`
-    );
+    // Stuur max 1x per sessie een CAPTCHA-mail
+    if (!global._captchaMailSent) {
+      global._captchaMailSent = true;
+      await this.mailer.send(
+        "🚨 CAPTCHA gedetecteerd — actie vereist!",
+        `Tijdstip: ${new Date().toLocaleString("nl-BE")}\nWereld: ${this.world.toUpperCase()}\n\nLos de CAPTCHA op in je browser.\nDe bot herstart automatisch na 45 minuten.`
+      );
+    }
     this.stop();
     const pauseMs = (this.config.captcha?.pause_minutes ?? 45) * 60 * 1000;
     setTimeout(() => { this.start(); }, pauseMs);
