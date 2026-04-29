@@ -2,7 +2,7 @@ name: Dagelijks Rapport
 
 on:
   schedule:
-    - cron: "0 21 * * *"  # 23:00 Belgische tijd (UTC+2 zomer)
+    - cron: "0 21 * * *"
   workflow_dispatch:
 
 jobs:
@@ -23,14 +23,19 @@ jobs:
         run: npm install --omit=dev
 
       - name: Cookies wegschrijven
-        run: echo '${{ secrets.GREPO_COOKIES }}' > cookies.json
+        run: |
+          if [ -n "$GREPO_COOKIES" ]; then
+            echo "$GREPO_COOKIES" > cookies.json
+          fi
+        env:
+          GREPO_COOKIES: ${{ secrets.GREPO_COOKIES }}
 
       - name: Dagrapport versturen
         env:
-          GREPO_EMAIL:    ${{ secrets.GREPO_EMAIL }}
-          GREPO_PASSWORD: ${{ secrets.GREPO_PASSWORD }}
-          SMTP_USER:      ${{ secrets.SMTP_USER }}
-          SMTP_PASS:      ${{ secrets.SMTP_PASS }}
-          SMTP_TO:        ${{ secrets.SMTP_TO }}
-          DAILY_REPORT:   "true"
+          GREPO_EMAIL:          ${{ secrets.GREPO_EMAIL }}
+          GREPO_PASSWORD:       ${{ secrets.GREPO_PASSWORD }}
+          GREPO_REMEMBER_TOKEN: ${{ secrets.GREPO_REMEMBER_TOKEN }}
+          SMTP_USER:            ${{ secrets.SMTP_USER }}
+          SMTP_PASS:            ${{ secrets.SMTP_PASS }}
+          SMTP_TO:              ${{ secrets.SMTP_TO }}
         run: node src/daily-report.js
