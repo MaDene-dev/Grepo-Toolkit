@@ -2,12 +2,14 @@ name: Keepalive
 
 on:
   schedule:
-    - cron: "0 8 * * *"  # Elke dag om 8u UTC (10u Belgische tijd)
+    - cron: "0 8 * * *"
   workflow_dispatch:
 
 jobs:
   keepalive:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Code ophalen
         uses: actions/checkout@v4
