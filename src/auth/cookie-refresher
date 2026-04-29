@@ -48,7 +48,12 @@ async function refreshCookies(config) {
     logger.info("[CookieRefresher] Login-formulier invullen...");
 
     // Wacht op het login-veld
-    await page.waitForSelector("input[name='login'], input[type='email']", { timeout: 10000 });
+    // Wacht eerst tot de pagina volledig geladen is, dan pas naar input zoeken
+await new Promise(r => setTimeout(r, 3000));
+await page.waitForSelector(
+  "input[name='login'], input[type='email'], input[name='user[login]'], #login_email",
+  { timeout: 20000 }
+);
 
     const loginField = await page.$("input[name='login']") ?? await page.$("input[type='email']");
     await loginField.click({ clickCount: 3 });
@@ -59,11 +64,21 @@ async function refreshCookies(config) {
     await passField.type(password, { delay: 50 });
 
     // Stap 3: Formulier indienen via de form zelf
+    // Log de gevonden inputs voor diagnose
+    const inputs = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("input")).map(i => `${i.type}[name=${i.name}]`).join(", ")
+    );
+    logger.info(`[CookieRefresher] Gevonden inputs: ${inputs}`);
+
     await Promise.all([
       page.waitForNavigation({ waitUntil: "networkidle2", timeout: 30000 }).catch(() => {}),
       page.evaluate(() => {
+        // Probeer meerdere manieren om het formulier in te sturen
         const form = document.querySelector("#loginform, form[action*='login'], form");
-        if (form) form.submit();
+        if (form) { form.submit(); return; }
+        // Fallback: klik de login knop
+        const btn = document.querySelector("input[type='submit'], button[type='submit'], a.button");
+        if (btn) btn.click();
       }),
     ]);
 
