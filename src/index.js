@@ -11,8 +11,8 @@ if (process.env.SMTP_TO)        config.email.to         = process.env.SMTP_TO;
 
 const IS_GHA = !!process.env.GITHUB_ACTIONS;
 if (IS_GHA) {
-  logger.info("[Boot] GitHub Actions modus: auto-stop na 25 minuten.");
-  setTimeout(() => { logger.info("[Boot] 25 min verstreken, netjes afsluiten."); process.exit(0); }, 25 * 60 * 1000);
+  logger.info("[Boot] GitHub Actions modus: auto-stop na 45 minuten.");
+  setTimeout(() => { logger.info("[Boot] 45 min verstreken, netjes afsluiten."); process.exit(0); }, 45 * 60 * 1000);
 }
 
 const RETRY_DELAY_MS = 5 * 60 * 1000;
