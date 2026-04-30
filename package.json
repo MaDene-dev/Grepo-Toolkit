@@ -1,7 +1,7 @@
 {
-  "name": "grepolis-bot",
-  "version": "1.0.0",
-  "description": "Self-hosted Grepolis autofarm bot",
+  "name": "grepo-toolkit",
+  "version": "2.0.0",
+  "description": "Grepo Toolkit \u2014 Automated Grepolis game assistant",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
