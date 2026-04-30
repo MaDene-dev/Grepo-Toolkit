@@ -4,8 +4,8 @@
     "A": {
       "jitter_minutes": 2,
       "time_option": 600,
-      "label": "10 min",
-      "interval_minutes": 10
+      "interval_minutes": 10,
+      "label": "10 min"
     },
     "_uitleg": "A=10min | B=40min | C=3u | D=8u",
     "B": {
@@ -47,9 +47,9 @@
       {
         "tot": "17:30",
         "van": "12:00",
-        "interval": "A",
+        "interval": "B",
         "_opmerking": "Middag",
-        "actief": false
+        "actief": true
       },
       {
         "tot": "23:55",
@@ -67,14 +67,6 @@
       }
     ]
   },
-  "opties": {
-    "sessie_refresh_uren": 6,
-    "extra_pauze_min_min": 5,
-    "extra_pauze_max_min": 10,
-    "rapport_elke_n_rondes": 999,
-    "extra_pauze_kans": 0.1,
-    "captcha_pauze_min": 45
-  },
   "email": {
     "smtp_port": 587,
     "smtp_host": "smtp.gmail.com",
@@ -82,9 +74,17 @@
   },
   "account": {
     "_uitleg": "Wordt overschreven door GREPO_ACCOUNT secret. Laat deze waarden leeg.",
-    "player_id": 0,
     "world": "",
+    "player_id": 0,
     "_towns_uitleg": "Hoeft niet ingevuld te worden ? bot detecteert steden automatisch uit de gamepagina.",
     "towns": []
+  },
+  "opties": {
+    "sessie_refresh_uren": 6,
+    "extra_pauze_min_min": 5,
+    "extra_pauze_max_min": 10,
+    "rapport_elke_n_rondes": 999,
+    "extra_pauze_kans": 0.1,
+    "captcha_pauze_min": 45
   }
 }
