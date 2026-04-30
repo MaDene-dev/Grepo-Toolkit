@@ -31,18 +31,13 @@ class GrepolisAPI {
 
   async _fetchTownsFromApi(playerId) {
     try {
-      const params = new URLSearchParams({
-        action:    "get_towns",
-        player_id: playerId,
-        h:         this.session.csrfToken,
-        _:         Date.now(),
-      });
-      const res = await this.session.client.get(
-        `${this.session.baseUrl}/game/towns?${params}`,
-        { headers: { ...this.session._headers(), "X-Requested-With": "XMLHttpRequest", Accept: "application/json, */*" } }
+      // Methode 1: via player_towns endpoint
+      const data = await this.session.gameGet(
+        "player_towns", 0, "get_player_towns",
+        JSON.stringify({ player_id: playerId })
       );
-      const data = res.data?.json ?? res.data;
-      const list = data?.towns ?? data?.player_towns ?? [];
+      logger.info(`[API] Towns response: ${JSON.stringify(data).substring(0, 200)}`);
+      const list = data?.towns ?? data?.player_towns ?? data?.own_towns ?? [];
       if (Array.isArray(list) && list.length > 0) {
         const towns = list.map(t => ({
           id:       t.id,
@@ -53,7 +48,21 @@ class GrepolisAPI {
         logger.info(`[API] ${towns.length} steden gevonden: ${towns.map(t => t.name).join(", ")}`);
         return towns;
       }
-    } catch (_) {}
+      // Methode 2: probeer HTML te parsen
+      const html = this.session.lastHtml ?? "";
+      const townMatches = [...html.matchAll(/"own_towns"\s*:\s*(\[[\s\S]*?\])/g)];
+      if (townMatches.length > 0) {
+        try {
+          const parsed = JSON.parse(townMatches[0][1]);
+          if (parsed.length > 0) {
+            logger.info(`[API] ${parsed.length} steden gevonden via HTML`);
+            return parsed.map(t => ({ id: t.id, name: t.name, island_x: t.x ?? 0, island_y: t.y ?? 0 }));
+          }
+        } catch (_) {}
+      }
+    } catch (err) {
+      logger.warn(`[API] Towns API fout: ${err.message}`);
+    }
     return [];
   }
 
