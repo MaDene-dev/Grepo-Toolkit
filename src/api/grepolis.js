@@ -6,93 +6,86 @@ class GrepolisAPI {
   }
 
   async getTowns() {
-    // Probeer steden op te halen via de player_towns API
-    const playerId = this.session.playerId || this.session.config.account.player_id;
-    if (playerId) {
-      const towns = await this._fetchTownsFromApi(playerId);
-      if (towns.length > 0) return towns;
-    }
+    // Stap 1: Haal town IDs op via toid cookie + game session
+    const towns = await this._getTownsFromSession();
+    if (towns.length > 0) return towns;
 
-    // Fallback: steden uit GREPO_ACCOUNT secret / config.json
+    // Stap 2: Fallback naar config/secret
     if (this.session.config.account.towns?.length > 0) {
-      logger.info(`[API] ${this.session.config.account.towns.length} steden uit config geladen`);
+      logger.info(`[API] ${this.session.config.account.towns.length} steden uit config`);
       return this.session.config.account.towns;
     }
 
-    throw new Error("Geen steden gevonden via API of config. Wacht op logs voor diagnose.");
+    throw new Error("Geen steden gevonden. Voeg towns toe aan het GREPO_ACCOUNT secret.");
   }
 
-  async _fetchTownsFromApi(playerId) {
-    const html = this.session.lastHtml ?? "";
-    if (!html) return [];
+  async _getTownsFromSession() {
+    try {
+      // Haal actief town ID op uit toid cookie
+      const cookies = await this.session.jar.getCookies(this.session.baseUrl);
+      const toidCookie = cookies.find(c => c.key === "toid");
+      if (!toidCookie) return [];
 
-    // Steden zitten in DM.loadData(...) call in de HTML
-    // Zoek alle DM.loadData calls en log de eerste 500 chars
-    const dmIdx = html.indexOf("DM.loadData(");
-    if (dmIdx >= 0) {
-      logger.info(`[API] DM.loadData snippet: ${html.substring(dmIdx, dmIdx + 500)}`);
-      try {
-        // Extraheer de JSON uit DM.loadData({...})
-        const start = html.indexOf("{", dmIdx);
-        let depth = 0, end = start;
-        for (let i = start; i < Math.min(html.length, start + 500000); i++) {
-          if (html[i] === "{") depth++;
-          if (html[i] === "}") depth--;
-          if (depth === 0) { end = i + 1; break; }
+      const activeTownId = parseInt(toidCookie.value);
+      logger.info(`[API] Actief town ID via cookie: ${activeTownId}`);
+
+      // Probe call: farm_town_overviews met nl_init=true geeft extra game data terug
+      // Coördinaten 0,0 — Grepolis gebruikt enkel town_id voor server-side lookup
+      const payload = JSON.stringify({
+        island_x: 0, island_y: 0,
+        current_town_id: activeTownId,
+        booty_researched: "", diplomacy_researched: "",
+        trade_office: 0, town_id: activeTownId, nl_init: true,
+      });
+
+      const data = await this.session.gameGet(
+        "farm_town_overviews", activeTownId,
+        "get_farm_towns_for_town", payload
+      );
+
+      // nl_init response bevat player_towns met alle steden
+      if (data?.player_towns) {
+        const list = Array.isArray(data.player_towns)
+          ? data.player_towns
+          : Object.values(data.player_towns);
+        if (list.length > 0) {
+          const towns = list.map(t => ({
+            id: t.id, name: t.name,
+            island_x: t.island_x ?? t.x ?? 0,
+            island_y: t.island_y ?? t.y ?? 0,
+          }));
+          logger.info(`[API] ${towns.length} steden gevonden: ${towns.map(t => t.name).join(", ")}`);
+          return towns;
         }
-        const jsonStr = html.substring(start, end);
-        const data = JSON.parse(jsonStr);
-
-        // Log de keys op het hoogste niveau
-        logger.info(`[API] DM.loadData keys: ${Object.keys(data).join(", ")}`);
-
-        // Probeer steden te vinden
-        const townsObj = data.towns ?? data.player?.towns ?? null;
-        if (townsObj) {
-          const list = Array.isArray(townsObj)
-            ? townsObj
-            : Object.values(townsObj);
-          if (list.length > 0) {
-            logger.info(`[API] Eerste stad sample: ${JSON.stringify(list[0]).substring(0, 200)}`);
-            const towns = list.map(t => ({
-              id:       t.id,
-              name:     t.name,
-              island_x: t.island_x ?? t.x ?? 0,
-              island_y: t.island_y ?? t.y ?? 0,
-            }));
-            logger.info(`[API] ${towns.length} steden gevonden: ${towns.map(t => t.name).join(", ")}`);
-            return towns;
-          }
-        }
-
-        logger.info(`[API] Geen towns gevonden in DM.loadData — log sample data voor diagnose`);
-      } catch (err) {
-        logger.warn(`[API] DM.loadData parse fout: ${err.message}`);
       }
-    } else {
-      logger.warn(`[API] DM.loadData niet gevonden in HTML (${html.length} bytes)`);
+
+      // Log wat de nl_init response bevat voor diagnose
+      const keys = data ? Object.keys(data).join(", ") : "leeg";
+      logger.info(`[API] nl_init response keys: ${keys}`);
+
+      // Als nl_init geen towns geeft, gebruik toch het actieve town met 0,0 coords
+      // farm_town_overviews werkt op basis van town_id, island coords zijn optioneel
+      if (data?.farm_town_list !== undefined) {
+        logger.info(`[API] Werkt zonder island coords — gebruik town ${activeTownId}`);
+        return [{ id: activeTownId, name: `Stad ${activeTownId}`, island_x: 0, island_y: 0 }];
+      }
+
+    } catch (err) {
+      logger.warn(`[API] Session towns fout: ${err.message}`);
     }
     return [];
   }
 
-  async _getTownIdFromCookie() {
-    try {
-      const cookies = await this.session.jar.getCookies(this.session.baseUrl);
-      const toid = cookies.find(c => c.key === "toid");
-      return toid ? parseInt(toid.value) : null;
-    } catch (_) { return null; }
-  }
-
   async getFarmOverview(town) {
     const payload = JSON.stringify({
-      island_x:             town.island_x,
-      island_y:             town.island_y,
+      island_x:             town.island_x ?? 0,
+      island_y:             town.island_y ?? 0,
       current_town_id:      town.id,
       booty_researched:     "",
       diplomacy_researched: "",
       trade_office:         0,
       town_id:              town.id,
-      nl_init:              true,
+      nl_init:              false,
     });
 
     const data = await this.session.gameGet(
@@ -108,21 +101,16 @@ class GrepolisAPI {
     const owned    = farmList.filter(v => v.rel === 1);
     const ready    = owned.filter(v => !v.loot || v.loot < now);
 
-    // Lege response zonder farm_town_list = verlopen sessie
     if (owned.length === 0 && !data?.farm_town_list) {
       logger.warn(`[API] Lege response voor ${town.name} — mogelijk verlopen sessie`);
       throw new Error("SESSION_EXPIRED");
     }
 
-    // Bereken wanneer het eerstvolgende dorp uit cooldown komt
-    const cooldowns = owned
-      .filter(v => v.loot && v.loot > now)
-      .map(v => v.loot);
+    const cooldowns = owned.filter(v => v.loot && v.loot > now).map(v => v.loot);
     const nextReady = cooldowns.length > 0 ? Math.min(...cooldowns) : null;
 
     if (nextReady) {
-      const secsLeft = nextReady - now;
-      const minsLeft = Math.ceil(secsLeft / 60);
+      const minsLeft = Math.ceil((nextReady - now) / 60);
       logger.info(`[API] ${owned.length} eigen dorpen, ${ready.length} klaar${ready.length === 0 ? ` (eerste klaar over ~${minsLeft} min)` : ""}`);
     } else {
       logger.info(`[API] ${owned.length} eigen dorpen, ${ready.length} klaar`);
@@ -153,9 +141,7 @@ class GrepolisAPI {
       const claimed = data.claimed_resources_per_resource_type ?? 0;
       const storage = data.resources ?? {};
       return {
-        wood:         claimed,
-        stone:        claimed,
-        iron:         claimed,
+        wood:  claimed, stone: claimed, iron: claimed,
         storageWood:  storage.wood  ?? 0,
         storageStone: storage.stone ?? 0,
         storageIron:  storage.iron  ?? 0,
