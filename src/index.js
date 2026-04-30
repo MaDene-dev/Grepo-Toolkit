@@ -1,6 +1,7 @@
 const Session      = require("./auth/session");
 const GrepolisAPI  = require("./api/grepolis");
-const VillageAgent = require("./modules/village-agent");
+const VillageAgent  = require("./modules/village-agent");
+const StatsWriter   = require("./utils/stats-writer");
 const Mailer       = require("./utils/mailer");
 const logger       = require("./utils/logger");
 const config       = require("../config.json");
@@ -80,7 +81,8 @@ async function boot() {
 
   const api    = new GrepolisAPI(session);
 
-  agent = new VillageAgent(api, config, mailer);
+  const stats = new StatsWriter(config);
+  agent = new VillageAgent(api, config, mailer, stats);
   if (IS_GHA) agent.autoStopAt = new Date(Date.now() + AUTO_STOP_MS);
   agent.start();
 }
