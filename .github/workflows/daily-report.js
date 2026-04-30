@@ -34,6 +34,8 @@ jobs:
         env:
           GREPO_EMAIL:          ${{ secrets.GREPO_EMAIL }}
           GREPO_PASSWORD:       ${{ secrets.GREPO_PASSWORD }}
+          GAS_URL:              ${{ secrets.GAS_URL }}
+          GAS_SECRET:           ${{ secrets.GAS_SECRET }}
           GREPO_ACCOUNT:        ${{ secrets.GREPO_ACCOUNT }}
           SMTP_USER:            ${{ secrets.SMTP_USER }}
           SMTP_PASS:            ${{ secrets.SMTP_PASS }}
