@@ -8,6 +8,15 @@ if (process.env.GREPO_EMAIL)    config.account.username = process.env.GREPO_EMAI
 if (process.env.GREPO_PASSWORD) config.account.password = process.env.GREPO_PASSWORD;
 if (process.env.SMTP_TO)        config.email.to         = process.env.SMTP_TO;
 
+if (process.env.GREPO_ACCOUNT) {
+  try {
+    const account = JSON.parse(process.env.GREPO_ACCOUNT);
+    if (account.world)     config.account.world     = account.world;
+    if (account.player_id) config.account.player_id = account.player_id;
+    if (account.towns)     config.account.towns     = account.towns;
+  } catch (e) {}
+}
+
 async function run() {
   logger.info("=== Dagelijks Rapport ===");
 
@@ -20,7 +29,7 @@ async function run() {
     logger.error(`Login mislukt: ${err.message}`);
     await mailer.send(
       "⚠️ Dagrapport mislukt — login fout",
-      `Tijdstip: ${new Date().toLocaleString("nl-BE")}\n\nDe bot kon niet inloggen voor het dagrapport.\nWaarschijnlijk zijn de cookies verlopen.\n\nExporteer nieuwe cookies via Cookie-Editor en update de GREPO_COOKIES secret.`
+      `Tijdstip: ${new Date().toLocaleString("nl-BE")}\n\nDe bot kon niet inloggen voor het dagrapport.\nWaarschijnlijk zijn de cookies verlopen.\n\nExporteer nieuwe cookies via Cookie-Editor en update het GREPO_COOKIES secret.`
     );
     process.exit(0);
   }
