@@ -247,6 +247,7 @@ class VillageAgent {
           let herstelOk = false;
           try {
             await this.api.session.login();
+            this.api.resetTowns(); // Reset town cache na sessie-herstel
             herstelOk = true;
             logger.info(`[Village Agent] Sessie hersteld!`);
           } catch (loginErr) {
