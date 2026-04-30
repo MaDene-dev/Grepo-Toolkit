@@ -23,7 +23,7 @@ const RETRY_DELAY_MS = 5 * 60 * 1000;
 let agent = null;
 
 async function boot() {
-  logger.info("=== Grepo Toolkit — Village Agent gestart ===");
+  logger.info("=== Grepo Toolkit :: Village Agent gestart ===");
   logger.info(`World: ${config.account.world}`);
 
   const mailer  = new Mailer(config);
