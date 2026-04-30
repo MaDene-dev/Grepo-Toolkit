@@ -1,11 +1,11 @@
-name: Keepalive
+name: Grepo Toolkit — Keepalive
 
 on:
   schedule:
-    - cron: "0 0 * * *"   # 02:00 Belgische tijd
-    - cron: "0 4 * * *"   # 06:00 Belgische tijd
-    - cron: "0 10 * * *"  # 12:00 Belgische tijd
-    - cron: "0 16 * * *"  # 18:00 Belgische tijd
+    - cron: "0 0 * * *"
+    - cron: "0 4 * * *"
+    - cron: "0 10 * * *"
+    - cron: "0 16 * * *"
   workflow_dispatch:
 
 jobs:
@@ -14,10 +14,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Code ophalen
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Lege commit om repo actief te houden
+      - name: Keep repository active
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
