@@ -6,36 +6,63 @@ class GrepolisAPI {
   }
 
   async getTowns() {
-    // Probeer steden dynamisch uit de gamepagina HTML te halen
-    const html = this.session.lastHtml;
-    if (html) {
-      const towns = this._parseTownsFromHtml(html);
+    // Probeer steden op te halen via de player_towns API
+    const playerId = this.session.playerId || this.session.config.account.player_id;
+    if (playerId) {
+      const towns = await this._fetchTownsFromApi(playerId);
       if (towns.length > 0) return towns;
     }
-    // Fallback: steden uit config.json
+
+    // Fallback: steden uit GREPO_ACCOUNT secret / config.json
     if (this.session.config.account.towns?.length > 0) {
+      logger.info(`[API] ${this.session.config.account.towns.length} steden uit config geladen`);
       return this.session.config.account.towns;
     }
-    throw new Error("Geen steden gevonden. Voeg ze toe aan config.json.");
+
+    // Laatste fallback: probeer toid cookie
+    const toid = await this._getTownIdFromCookie();
+    if (toid) {
+      logger.info(`[API] Town ID ${toid} gevonden via cookie`);
+      return [{ id: toid, name: `Stad ${toid}`, island_x: 0, island_y: 0 }];
+    }
+
+    throw new Error("Geen steden gevonden.");
   }
 
-  _parseTownsFromHtml(html) {
-    const towns   = [];
-    const pattern = /\{"id"\s*:\s*(\d+)\s*,\s*"name"\s*:\s*"([^"]+)"[^}]*?"island_x"\s*:\s*(\d+)[^}]*?"island_y"\s*:\s*(\d+)/g;
-    let match;
-    while ((match = pattern.exec(html)) !== null) {
-      const town = {
-        id:       parseInt(match[1]),
-        name:     match[2],
-        island_x: parseInt(match[3]),
-        island_y: parseInt(match[4]),
-      };
-      if (!towns.find(t => t.id === town.id)) towns.push(town);
-    }
-    if (towns.length > 0) {
-      logger.info(`[API] ${towns.length} steden gevonden: ${towns.map(t => t.name).join(", ")}`);
-    }
-    return towns;
+  async _fetchTownsFromApi(playerId) {
+    try {
+      const params = new URLSearchParams({
+        action:    "get_towns",
+        player_id: playerId,
+        h:         this.session.csrfToken,
+        _:         Date.now(),
+      });
+      const res = await this.session.client.get(
+        `${this.session.baseUrl}/game/towns?${params}`,
+        { headers: { ...this.session._headers(), "X-Requested-With": "XMLHttpRequest", Accept: "application/json, */*" } }
+      );
+      const data = res.data?.json ?? res.data;
+      const list = data?.towns ?? data?.player_towns ?? [];
+      if (Array.isArray(list) && list.length > 0) {
+        const towns = list.map(t => ({
+          id:       t.id,
+          name:     t.name,
+          island_x: t.island_x ?? 0,
+          island_y: t.island_y ?? 0,
+        }));
+        logger.info(`[API] ${towns.length} steden gevonden: ${towns.map(t => t.name).join(", ")}`);
+        return towns;
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  async _getTownIdFromCookie() {
+    try {
+      const cookies = await this.session.jar.getCookies(this.session.baseUrl);
+      const toid = cookies.find(c => c.key === "toid");
+      return toid ? parseInt(toid.value) : null;
+    } catch (_) { return null; }
   }
 
   async getFarmOverview(town) {
