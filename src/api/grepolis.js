@@ -23,26 +23,41 @@ class GrepolisAPI {
       JSON.stringify({ town_id: activeTownId, nl_init: true })
     );
 
-    logger.info(`[API] index response type: ${typeof data} | keys: ${data ? Object.keys(data).join(", ") : "null"}`);
-    if (data?.farm_town_list !== undefined) {
-      logger.info(`[API] farm_town_list lengte: ${data.farm_town_list.length}`);
-    }
-    if (data?.error) logger.warn(`[API] index error: ${JSON.stringify(data.error)}`);
+    // index response bevat "towns" (object met town data) en "farm_town_list" (per actieve stad)
+    // Probeer towns object eerst — bevat alle steden van de speler
+    if (data?.towns) {
+      const townList = Array.isArray(data.towns)
+        ? data.towns
+        : Object.values(data.towns);
 
+      if (townList.length > 0) {
+        this._towns = townList.map(t => ({
+          id:       t.id       ?? t.town_id ?? activeTownId,
+          name:     t.name     ?? `Stad ${t.id ?? activeTownId}`,
+          island_x: t.island_x ?? t.x ?? 0,
+          island_y: t.island_y ?? t.y ?? 0,
+        }));
+        logger.info(`[API] ${this._towns.length} steden gevonden: ${this._towns.map(t => t.name).join(", ")}`);
+
+        // Als island coords nog 0,0 zijn, haal ze op via farm_town_list
+        const needCoords = this._towns.filter(t => !t.island_x && !t.island_y);
+        if (needCoords.length > 0) {
+          logger.info(`[API] Island coords ophalen via farm_town_list...`);
+          // Doe een get_farm_towns_for_town call met nl_init voor de eerste stad
+          await this._enrichTownCoords(this._towns[0]);
+        }
+
+        return this._towns;
+      }
+    }
+
+    // Fallback: farm_town_list voor island coords
     const farmList = data?.farm_town_list ?? [];
     if (farmList.length > 0) {
-      // Extraheer island coords uit de eerste farm (alle farms zijn op hetzelfde eiland)
       const ix = farmList[0].island_x;
       const iy = farmList[0].island_y;
-      logger.info(`[API] Island coords: x=${ix} y=${iy}`);
-
-      this._towns = [{
-        id:       activeTownId,
-        name:     `Stad ${activeTownId}`,
-        island_x: ix,
-        island_y: iy,
-      }];
-      logger.info(`[API] Stad ${activeTownId} geconfigureerd (x=${ix}, y=${iy})`);
+      this._towns = [{ id: activeTownId, name: `Stad ${activeTownId}`, island_x: ix, island_y: iy }];
+      logger.info(`[API] Stad ${activeTownId} via farm_town_list (x=${ix}, y=${iy})`);
       return this._towns;
     }
 
@@ -54,6 +69,28 @@ class GrepolisAPI {
     }
 
     throw new Error("Geen steden gevonden. Voeg towns toe aan het GREPO_ACCOUNT secret.");
+  }
+
+  async _enrichTownCoords(town) {
+    try {
+      const payload = JSON.stringify({
+        island_x: 0, island_y: 0,
+        current_town_id: town.id,
+        booty_researched: "", diplomacy_researched: "",
+        trade_office: 0, town_id: town.id, nl_init: true,
+      });
+      const data = await this.session.gameGet(
+        "farm_town_overviews", town.id, "get_farm_towns_for_town", payload
+      );
+      const list = data?.farm_town_list ?? [];
+      if (list.length > 0 && list[0].island_x) {
+        // Update alle towns met dezelfde island coords
+        this._towns.forEach(t => {
+          if (!t.island_x) { t.island_x = list[0].island_x; t.island_y = list[0].island_y; }
+        });
+        logger.info(`[API] Island coords: x=${list[0].island_x} y=${list[0].island_y}`);
+      }
+    } catch (_) {}
   }
 
   // Reset towns cache bij sessie-herstel
