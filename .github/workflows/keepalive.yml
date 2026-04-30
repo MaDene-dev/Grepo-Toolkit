@@ -2,7 +2,10 @@ name: Keepalive
 
 on:
   schedule:
-    - cron: "0 8 * * *"
+    - cron: "0 0 * * *"   # 02:00 Belgische tijd
+    - cron: "0 4 * * *"   # 06:00 Belgische tijd
+    - cron: "0 10 * * *"  # 12:00 Belgische tijd
+    - cron: "0 16 * * *"  # 18:00 Belgische tijd
   workflow_dispatch:
 
 jobs:
@@ -18,5 +21,5 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git commit --allow-empty -m "chore: keepalive $(date +'%Y-%m-%d')"
+          git commit --allow-empty -m "chore: keepalive $(date +'%Y-%m-%d %H:%M')"
           git push
