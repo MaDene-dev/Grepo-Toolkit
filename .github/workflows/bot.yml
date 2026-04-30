@@ -49,16 +49,3 @@ jobs:
           SMTP_TO:              ${{ secrets.SMTP_TO }}
         run: node src/index.js
 
-      - name: Push dashboard data
-        if: always()
-        env:
-          DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          # Schrijf wachtwoord naar config.js (staat in .gitignore, nooit in git history)
-          echo "window._dashboardPassword = '${DASHBOARD_PASSWORD:-grepo}';" > docs/config.js
-          git add docs/data.json || true
-          git add -f docs/config.js || true
-          git diff --staged --quiet || git commit -m "data: update dashboard stats"
-          git push || true
