@@ -1,11 +1,10 @@
 const logger = require("../utils/logger");
 
 class VillageAgent {
-  constructor(api, config, mailer, stats = null) {
+  constructor(api, config, mailer) {
     this.api      = api;
     this.config   = config;
     this.mailer   = mailer;
-    this.stats_writer = stats;
     this.running  = false;
     this.timer    = null;
     this.startTime = Date.now();
@@ -107,7 +106,6 @@ class VillageAgent {
   stop() {
     this.running = false;
     if (this.timer) clearTimeout(this.timer);
-    if (this.stats_writer) this.stats_writer.updateStatus("stopped");
     logger.info("[Village Agent] Gestopt.");
   }
 
@@ -203,11 +201,6 @@ class VillageAgent {
         logger.info(`[Village Agent] Cumulatief | 🪵${this.stats.totalWood} 🪨${this.stats.totalStone} 🪙${this.stats.totalIron} | ${this.stats.runs} rondes`);
       } else {
         logger.info(`[Village Agent] Ronde #${this.roundNum} | niets te halen | ${dur}s`);
-      }
-
-      // Schrijf stats na elke ronde naar dashboard
-      if (this.stats_writer) {
-        this.stats_writer.recordSession(this.stats, this.history);
       }
 
       const rapportN = this.opties.rapport_elke_n_rondes ?? 999;
