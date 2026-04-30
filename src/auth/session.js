@@ -124,9 +124,22 @@ class Session {
     return res.data?.json ?? res.data;
   }
 
+  _getRandomUserAgent() {
+    const agents = [
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+      "Mozilla/5.0 (Windows NT 11.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    ];
+    if (!this._userAgent) {
+      this._userAgent = agents[Math.floor(Math.random() * agents.length)];
+    }
+    return this._userAgent;
+  }
+
   _headers() {
     return {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      "User-Agent": this._getRandomUserAgent(),
       "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       "Accept-Language": "nl-BE,nl;q=0.9,en;q=0.7",
       "Referer": `${this.baseUrl}/game/${this.world}`,
