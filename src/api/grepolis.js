@@ -69,8 +69,21 @@ class GrepolisAPI {
       throw new Error("SESSION_EXPIRED");
     }
 
-    logger.info(`[API] ${owned.length} eigen dorpen, ${ready.length} klaar`);
-    return { owned, ready };
+    // Bereken wanneer het eerstvolgende dorp uit cooldown komt
+    const cooldowns = owned
+      .filter(v => v.loot && v.loot > now)
+      .map(v => v.loot);
+    const nextReady = cooldowns.length > 0 ? Math.min(...cooldowns) : null;
+
+    if (nextReady) {
+      const secsLeft = nextReady - now;
+      const minsLeft = Math.ceil(secsLeft / 60);
+      logger.info(`[API] ${owned.length} eigen dorpen, ${ready.length} klaar${ready.length === 0 ? ` (eerste klaar over ~${minsLeft} min)` : ""}`);
+    } else {
+      logger.info(`[API] ${owned.length} eigen dorpen, ${ready.length} klaar`);
+    }
+
+    return { owned, ready, nextReady };
   }
 
   async claimLoads(town, farmTownIds, timeOption = 300) {
