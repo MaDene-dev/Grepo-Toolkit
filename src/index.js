@@ -2,7 +2,6 @@ const Session      = require("./auth/session");
 const GrepolisAPI  = require("./api/grepolis");
 const VillageAgent = require("./modules/village-agent");
 const Mailer       = require("./utils/mailer");
-const StatsWriter  = require("./utils/stats-writer");
 const logger       = require("./utils/logger");
 const config       = require("../config.json");
 
@@ -65,9 +64,8 @@ async function boot() {
   }
 
   const api    = new GrepolisAPI(session);
-  const stats  = new StatsWriter(config);
 
-  agent = new VillageAgent(api, config, mailer, stats);
+  agent = new VillageAgent(api, config, mailer;
   agent.start();
 }
 
