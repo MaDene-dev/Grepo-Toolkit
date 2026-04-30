@@ -9,7 +9,11 @@ class StatsWriter {
   }
 
   async recordSession(stats, history) {
-    if (!this.gasUrl || !this.gasSecret) return;
+    if (!this.gasUrl || !this.gasSecret) {
+      logger.warn("[Stats] GAS_URL of GAS_SECRET niet ingesteld — dashboard wordt niet bijgewerkt");
+      return;
+    }
+    logger.info(`[Stats] Versturen naar dashboard...`);
 
     const payload = {
       world:   this.world,
@@ -51,16 +55,19 @@ class StatsWriter {
           let data = "";
           res.on("data", d => data += d);
           res.on("end", () => {
+            logger.info(`[Stats] HTTP ${res.statusCode} | response: ${data.substring(0, 200)}`);
             try {
               const r = JSON.parse(data);
               if (r.ok) logger.info("[Stats] Dashboard bijgewerkt ✓");
               else      logger.warn(`[Stats] GAS fout: ${r.error}`);
-            } catch (_) {}
+            } catch (e) {
+              logger.warn(`[Stats] JSON parse fout: ${e.message}`);
+            }
             resolve();
           });
         });
         req.on("error", err => { logger.warn(`[Stats] POST mislukt: ${err.message}`); resolve(); });
-        req.setTimeout(10000, () => { req.destroy(); resolve(); });
+        req.setTimeout(10000, () => { logger.warn("[Stats] Timeout na 10s"); req.destroy(); resolve(); });
         req.write(body);
         req.end();
       });
