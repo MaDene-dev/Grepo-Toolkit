@@ -9,6 +9,19 @@ if (process.env.GREPO_EMAIL)    config.account.username = process.env.GREPO_EMAI
 if (process.env.GREPO_PASSWORD) config.account.password = process.env.GREPO_PASSWORD;
 if (process.env.SMTP_TO)        config.email.to         = process.env.SMTP_TO;
 
+// Laad account-gegevens uit GREPO_ACCOUNT secret (JSON)
+// Format: {"world":"nlXXX","player_id":1234567,"towns":[{"id":123,"name":"Mijn Stad","island_x":100,"island_y":200}]}
+if (process.env.GREPO_ACCOUNT) {
+  try {
+    const account = JSON.parse(process.env.GREPO_ACCOUNT);
+    if (account.world)     config.account.world     = account.world;
+    if (account.player_id) config.account.player_id = account.player_id;
+    if (account.towns)     config.account.towns     = account.towns;
+  } catch (e) {
+    console.error("[Boot] GREPO_ACCOUNT secret is geen geldige JSON:", e.message);
+  }
+}
+
 const IS_GHA = !!process.env.GITHUB_ACTIONS;
 const AUTO_STOP_MS = 45 * 60 * 1000;
 if (IS_GHA) {
