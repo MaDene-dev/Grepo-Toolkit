@@ -26,19 +26,51 @@ class GrepolisAPI {
     const html = this.session.lastHtml ?? "";
     if (!html) return [];
 
-    // Log een stuk van de HTML rond "town" voor diagnose
-    const idx = html.indexOf('"towns"');
-    if (idx > 0) {
-      logger.info(`[API] HTML snippet rond "towns": ${html.substring(idx, idx + 300)}`);
-    } else {
-      // Zoek alternatieve keys
-      for (const key of ["own_towns", "player_towns", "town_list", "DM.loadData"]) {
-        const i = html.indexOf(key);
-        if (i > 0) {
-          logger.info(`[API] HTML snippet rond "${key}": ${html.substring(i, i + 300)}`);
-          break;
+    // Steden zitten in DM.loadData(...) call in de HTML
+    // Zoek alle DM.loadData calls en log de eerste 500 chars
+    const dmIdx = html.indexOf("DM.loadData(");
+    if (dmIdx >= 0) {
+      logger.info(`[API] DM.loadData snippet: ${html.substring(dmIdx, dmIdx + 500)}`);
+      try {
+        // Extraheer de JSON uit DM.loadData({...})
+        const start = html.indexOf("{", dmIdx);
+        let depth = 0, end = start;
+        for (let i = start; i < Math.min(html.length, start + 500000); i++) {
+          if (html[i] === "{") depth++;
+          if (html[i] === "}") depth--;
+          if (depth === 0) { end = i + 1; break; }
         }
+        const jsonStr = html.substring(start, end);
+        const data = JSON.parse(jsonStr);
+
+        // Log de keys op het hoogste niveau
+        logger.info(`[API] DM.loadData keys: ${Object.keys(data).join(", ")}`);
+
+        // Probeer steden te vinden
+        const townsObj = data.towns ?? data.player?.towns ?? null;
+        if (townsObj) {
+          const list = Array.isArray(townsObj)
+            ? townsObj
+            : Object.values(townsObj);
+          if (list.length > 0) {
+            logger.info(`[API] Eerste stad sample: ${JSON.stringify(list[0]).substring(0, 200)}`);
+            const towns = list.map(t => ({
+              id:       t.id,
+              name:     t.name,
+              island_x: t.island_x ?? t.x ?? 0,
+              island_y: t.island_y ?? t.y ?? 0,
+            }));
+            logger.info(`[API] ${towns.length} steden gevonden: ${towns.map(t => t.name).join(", ")}`);
+            return towns;
+          }
+        }
+
+        logger.info(`[API] Geen towns gevonden in DM.loadData — log sample data voor diagnose`);
+      } catch (err) {
+        logger.warn(`[API] DM.loadData parse fout: ${err.message}`);
       }
+    } else {
+      logger.warn(`[API] DM.loadData niet gevonden in HTML (${html.length} bytes)`);
     }
     return [];
   }
