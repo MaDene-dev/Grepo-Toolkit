@@ -210,8 +210,11 @@ class VillageAgent {
 
     } catch (err) {
       if (err.message === "SESSION_EXPIRED") {
+        // Ronde was niet uitgevoerd — tel hem niet mee
+        this.roundNum--;
+        this.stats.runs--;
+
         if (this._recovering) {
-          // Al bezig met herstel maar nog steeds fout — geef op
           logger.error(`[Village Agent] Herstel mislukt — volgende ronde ingepland.`);
           this._recovering = false;
           this.stats.failedRuns++;
@@ -229,12 +232,11 @@ class VillageAgent {
           }
           this._recovering = false;
 
-          // Na herstel: plan een snelle ronde in (1 min) zodat meteen gefarmd wordt
           if (herstelOk) {
-            logger.info(`[Village Agent] Snelle ronde ingepland over 1 minuut.`);
+            logger.info(`[Village Agent] Snelle ronde ingepland over 30 seconden.`);
             if (this.timer) clearTimeout(this.timer);
-            this.timer = setTimeout(() => this.run(), 60_000);
-            return; // Sla de normale _schedule() hieronder over
+            this.timer = setTimeout(() => this.run(), 30_000);
+            return;
           }
         }
       } else {
