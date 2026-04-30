@@ -19,14 +19,7 @@ class GrepolisAPI {
       return this.session.config.account.towns;
     }
 
-    // Laatste fallback: probeer toid cookie
-    const toid = await this._getTownIdFromCookie();
-    if (toid) {
-      logger.info(`[API] Town ID ${toid} gevonden via cookie`);
-      return [{ id: toid, name: `Stad ${toid}`, island_x: 0, island_y: 0 }];
-    }
-
-    throw new Error("Geen steden gevonden.");
+    throw new Error("Geen steden gevonden via API of config. Wacht op logs voor diagnose.");
   }
 
   async _fetchTownsFromApi(playerId) {
