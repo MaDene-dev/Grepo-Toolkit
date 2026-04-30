@@ -41,14 +41,14 @@ Dit is het enige bestand dat je normaal hoeft aan te passen.
 
 ```json
 "account": {
-  "world": "nl133",
-  "player_id": 1361000,
+  "world": "nlXXX",
+  "player_id": 0,
   "towns": [
     {
-      "id": 329,
-      "name": "Stad van Marcotics",
-      "island_x": 475,
-      "island_y": 503
+      "id": 0,
+      "name": "Mijn Stad",
+      "island_x": 0,
+      "island_y": 0
     }
   ]
 }
