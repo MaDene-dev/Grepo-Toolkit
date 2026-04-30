@@ -26,9 +26,9 @@
     "_uitleg": "Zet 'actief' op true/false om een blok aan of uit te zetten. Tijden zijn Belgisch.",
     "blokken": [
       { "actief": false, "van": "00:00", "tot": "06:30", "interval": "D", "_opmerking": "Nacht — uit" },
-      { "actief": false,  "van": "06:30", "tot": "12:00", "interval": "A", "_opmerking": "Ochtend" },
+      { "actief": true,  "van": "06:30", "tot": "12:00", "interval": "A", "_opmerking": "Ochtend" },
       { "actief": false,  "van": "12:00", "tot": "17:30", "interval": "A", "_opmerking": "Middag" },
-      { "actief": false,  "van": "17:30", "tot": "23:00", "interval": "A", "_opmerking": "Avond" },
+      { "actief": true,  "van": "17:30", "tot": "23:00", "interval": "A", "_opmerking": "Avond" },
       { "actief": false, "van": "23:00", "tot": "24:00", "interval": "D", "_opmerking": "Laat — uit" }
     ]
   },
