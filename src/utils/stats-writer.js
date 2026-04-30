@@ -56,29 +56,29 @@ class StatsWriter {
 
     try {
       // Gebruik node-fetch stijl via axios-achtige aanpak met redirect support
+      // GAS Web App vereist dat POST-methode behouden blijft bij redirects
       const postWithRedirect = (urlStr, body, secret, maxRedirects = 5) => {
         return new Promise((resolve) => {
           const https = require("https");
-          const http  = require("http");
           const url   = new URL(urlStr);
-          const lib   = url.protocol === "https:" ? https : http;
 
-          const req = lib.request({
+          const options = {
             hostname: url.hostname,
             path:     url.pathname + url.search,
             method:   "POST",
             headers: {
               "Content-Type":   "application/json",
-              "X-Bot-Secret":   secret,
               "Content-Length": Buffer.byteLength(body),
+              "X-Bot-Secret":   secret,
             },
-          }, res => {
-            // Volg redirects
-            if ([301,302,303,307,308].includes(res.statusCode) && res.headers.location && maxRedirects > 0) {
-              const newUrl = res.headers.location.startsWith("http")
-                ? res.headers.location
-                : new URL(res.headers.location, urlStr).href;
+          };
+
+          const req = https.request(options, res => {
+            if ([301,302,307,308].includes(res.statusCode) && res.headers.location && maxRedirects > 0) {
+              const loc = res.headers.location;
+              const newUrl = loc.startsWith("http") ? loc : new URL(loc, urlStr).href;
               res.resume();
+              // Herstart als POST naar de redirect URL
               resolve(postWithRedirect(newUrl, body, secret, maxRedirects - 1));
               return;
             }
