@@ -2,10 +2,10 @@ const logger = require("../utils/logger");
 
 class StatsWriter {
   constructor(config) {
-    this.world      = config.account.world ?? "unknown";
+    this.world         = config.account.world ?? "unknown";
     this._sessionStart = new Date().toISOString();
-    this.gasUrl     = process.env.GAS_URL;
-    this.gasSecret  = process.env.GAS_SECRET;
+    this.gasUrl        = process.env.GAS_URL;
+    this.gasSecret     = process.env.GAS_SECRET;
   }
 
   async recordSession(stats, history) {
@@ -13,26 +13,44 @@ class StatsWriter {
       logger.warn("[Stats] GAS_URL of GAS_SECRET niet ingesteld — dashboard wordt niet bijgewerkt");
       return;
     }
-    logger.info(`[Stats] Versturen naar dashboard...`);
+    logger.info("[Stats] Versturen naar dashboard...");
+
+    // Haal opslag-info uit de laatste ronde
+    const lastRound = history.length > 0 ? history[history.length - 1] : null;
+
+    // Bereken gemiddelde rondetijd
+    const durations = history.map(r => parseFloat(r.duration)).filter(d => !isNaN(d));
+    const avgDuration = durations.length > 0
+      ? (durations.reduce((a, b) => a + b, 0) / durations.length).toFixed(1)
+      : 0;
 
     const payload = {
-      world:   this.world,
-      runs:    stats.runs,
-      wood:    stats.totalWood,
-      stone:   stats.totalStone,
-      silver:  stats.totalIron,
-      farms:   stats.totalFarms,
-      failed:  stats.failedRuns,
-      started: this._sessionStart,
-      ended:   new Date().toISOString(),
-      rounds:  history.slice(-20).map(r => ({
-        time:       r.time,
-        label:      r.label,
-        farms:      r.farms,
-        wood:       r.wood,
-        stone:      r.stone,
-        silver:     r.silver ?? r.iron ?? 0,
-        storageMax: r.storageMax ?? 0,
+      world:        this.world,
+      runs:         stats.runs,
+      wood:         stats.totalWood,
+      stone:        stats.totalStone,
+      silver:       stats.totalIron,
+      farms:        stats.totalFarms,
+      failed:       stats.failedRuns,
+      avg_duration: avgDuration,
+      started:      this._sessionStart,
+      ended:        new Date().toISOString(),
+      // Opslag van laatste ronde
+      storage_wood:  lastRound?.storageWood  ?? 0,
+      storage_stone: lastRound?.storageStone ?? 0,
+      storage_iron:  lastRound?.storageIron  ?? 0,
+      storage_max:   lastRound?.storageMax   ?? 0,
+      rounds: history.slice(-20).map(r => ({
+        time:        r.time,
+        label:       r.label,
+        farms:       r.farms,
+        wood:        r.wood,
+        stone:       r.stone,
+        silver:      r.silver ?? r.iron ?? 0,
+        storageWood:  r.storageWood  ?? 0,
+        storageStone: r.storageStone ?? 0,
+        storageIron:  r.storageIron  ?? 0,
+        storageMax:   r.storageMax   ?? 0,
       })),
     };
 
@@ -41,12 +59,12 @@ class StatsWriter {
       const url   = new URL(this.gasUrl);
       const body  = JSON.stringify(payload);
 
-      await new Promise((resolve, reject) => {
+      await new Promise((resolve) => {
         const req = https.request({
           hostname: url.hostname,
           path:     url.pathname + url.search,
           method:   "POST",
-          headers:  {
+          headers: {
             "Content-Type":   "application/json",
             "X-Bot-Secret":   this.gasSecret,
             "Content-Length": Buffer.byteLength(body),
@@ -55,7 +73,7 @@ class StatsWriter {
           let data = "";
           res.on("data", d => data += d);
           res.on("end", () => {
-            logger.info(`[Stats] HTTP ${res.statusCode} | response: ${data.substring(0, 200)}`);
+            logger.info(`[Stats] HTTP ${res.statusCode} | ${data.substring(0, 200)}`);
             try {
               const r = JSON.parse(data);
               if (r.ok) logger.info("[Stats] Dashboard bijgewerkt ✓");
