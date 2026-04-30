@@ -1,4 +1,4 @@
-name: Grepolis Bot
+name: Grepo Toolkit — Village Agent
 
 on:
   schedule:
@@ -6,30 +6,33 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: grepolis-bot
-  cancel-in-progress: true  # Annuleer wachtende runs — enkel de nieuwste telt
+  group: grepo-toolkit
+  cancel-in-progress: true
+
+permissions:
+  contents: write
 
 jobs:
-  run-bot:
+  run-agent:
     runs-on: ubuntu-latest
     timeout-minutes: 48
 
     steps:
-      - name: Code ophalen
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Node.js instellen
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "24"
 
-      - name: Dependencies installeren
+      - name: Install dependencies
         run: npm install
 
-      - name: Chromium installeren voor Puppeteer
+      - name: Install Chromium for Puppeteer
         run: node node_modules/puppeteer/install.mjs
 
-      - name: Cookies wegschrijven
+      - name: Write cookies
         run: |
           if [ -n "$GREPO_COOKIES" ]; then
             echo "$GREPO_COOKIES" > cookies.json
@@ -37,12 +40,25 @@ jobs:
         env:
           GREPO_COOKIES: ${{ secrets.GREPO_COOKIES }}
 
-      - name: Bot starten
+      - name: Run Village Agent
         env:
           GREPO_EMAIL:          ${{ secrets.GREPO_EMAIL }}
           GREPO_PASSWORD:       ${{ secrets.GREPO_PASSWORD }}
-          GREPO_REMEMBER_TOKEN: ${{ secrets.GREPO_REMEMBER_TOKEN }}
           SMTP_USER:            ${{ secrets.SMTP_USER }}
           SMTP_PASS:            ${{ secrets.SMTP_PASS }}
           SMTP_TO:              ${{ secrets.SMTP_TO }}
         run: node src/index.js
+
+      - name: Push dashboard data
+        if: always()
+        env:
+          DASHBOARD_PASSWORD: ${{ secrets.DASHBOARD_PASSWORD }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Schrijf wachtwoord naar config.js (staat in .gitignore, nooit in git history)
+          echo "window._dashboardPassword = '${DASHBOARD_PASSWORD:-grepo}';" > docs/config.js
+          git add docs/data.json || true
+          git add -f docs/config.js || true
+          git diff --staged --quiet || git commit -m "data: update dashboard stats"
+          git push || true
