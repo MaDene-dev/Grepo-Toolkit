@@ -1,4 +1,4 @@
-name: Dagelijks Rapport
+name: Grepo Toolkit — Daily Report
 
 on:
   schedule:
@@ -11,18 +11,18 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - name: Code ophalen
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Node.js instellen
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "24"
 
-      - name: Dependencies installeren
+      - name: Install dependencies
         run: npm install --omit=dev
 
-      - name: Cookies wegschrijven
+      - name: Write cookies
         run: |
           if [ -n "$GREPO_COOKIES" ]; then
             echo "$GREPO_COOKIES" > cookies.json
@@ -30,12 +30,12 @@ jobs:
         env:
           GREPO_COOKIES: ${{ secrets.GREPO_COOKIES }}
 
-      - name: Dagrapport versturen
+      - name: Send daily report
         env:
           GREPO_EMAIL:          ${{ secrets.GREPO_EMAIL }}
           GREPO_PASSWORD:       ${{ secrets.GREPO_PASSWORD }}
-          GREPO_REMEMBER_TOKEN: ${{ secrets.GREPO_REMEMBER_TOKEN }}
           SMTP_USER:            ${{ secrets.SMTP_USER }}
           SMTP_PASS:            ${{ secrets.SMTP_PASS }}
           SMTP_TO:              ${{ secrets.SMTP_TO }}
+          DAILY_REPORT:         "true"
         run: node src/daily-report.js
