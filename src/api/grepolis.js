@@ -2,17 +2,15 @@ const logger = require("../utils/logger");
 
 class GrepolisAPI {
   constructor(session) {
-    this.session = session; // bewaar referentie voor session refresh
+    this.session = session;
   }
 
   async getTowns() {
-    // Probeer steden uit de HTML te halen (dynamisch)
+    // Probeer steden dynamisch uit de gamepagina HTML te halen
     const html = this.session.lastHtml;
     if (html) {
       const towns = this._parseTownsFromHtml(html);
-      if (towns.length > 0) {
-        return towns;
-      }
+      if (towns.length > 0) return towns;
     }
     // Fallback: steden uit config.json
     if (this.session.config.account.towns?.length > 0) {
@@ -22,8 +20,7 @@ class GrepolisAPI {
   }
 
   _parseTownsFromHtml(html) {
-    const towns = [];
-    // Grepolis stopt town-data in de HTML als JSON objecten
+    const towns   = [];
     const pattern = /\{"id"\s*:\s*(\d+)\s*,\s*"name"\s*:\s*"([^"]+)"[^}]*?"island_x"\s*:\s*(\d+)[^}]*?"island_y"\s*:\s*(\d+)/g;
     let match;
     while ((match = pattern.exec(html)) !== null) {
@@ -33,19 +30,16 @@ class GrepolisAPI {
         island_x: parseInt(match[3]),
         island_y: parseInt(match[4]),
       };
-      // Dedupliceer op basis van id
-      if (!towns.find(t => t.id === town.id)) {
-        towns.push(town);
-      }
+      if (!towns.find(t => t.id === town.id)) towns.push(town);
     }
     if (towns.length > 0) {
-      logger.info(`[API] ${towns.length} steden gevonden in HTML: ${towns.map(t => t.name).join(", ")}`);
+      logger.info(`[API] ${towns.length} steden gevonden: ${towns.map(t => t.name).join(", ")}`);
     }
     return towns;
   }
 
   async getFarmOverview(town) {
-    const jsonPayload = JSON.stringify({
+    const payload = JSON.stringify({
       island_x:             town.island_x,
       island_y:             town.island_y,
       current_town_id:      town.id,
@@ -57,10 +51,9 @@ class GrepolisAPI {
     });
 
     const data = await this.session.gameGet(
-      "farm_town_overviews", town.id, "get_farm_towns_for_town", jsonPayload
+      "farm_town_overviews", town.id, "get_farm_towns_for_town", payload
     );
 
-    // CAPTCHA check
     if (typeof data === "string" && (data.includes("captcha") || data.includes("robot"))) {
       throw new Error("CAPTCHA gedetecteerd in response");
     }
@@ -70,9 +63,7 @@ class GrepolisAPI {
     const owned    = farmList.filter(v => v.rel === 1);
     const ready    = owned.filter(v => !v.loot || v.loot < now);
 
-    // Als er 0 eigen dorpen zijn maar de response ziet er geldig uit,
-    // kan dit betekenen dat de sessie verlopen is zonder foutcode.
-    // Controleer de sessie door te kijken of farm_town_list überhaupt aanwezig is.
+    // Lege response zonder farm_town_list = verlopen sessie
     if (owned.length === 0 && !data?.farm_town_list) {
       logger.warn(`[API] Lege response voor ${town.name} — mogelijk verlopen sessie`);
       throw new Error("SESSION_EXPIRED");
@@ -83,7 +74,7 @@ class GrepolisAPI {
   }
 
   async claimLoads(town, farmTownIds, timeOption = 300) {
-    const jsonPayload = JSON.stringify({
+    const payload = JSON.stringify({
       farm_town_ids:   farmTownIds,
       time_option:     timeOption,
       claim_factor:    "normal",
@@ -93,22 +84,20 @@ class GrepolisAPI {
     });
 
     const data = await this.session.gamePost(
-      "farm_town_overviews", town.id, "claim_loads", jsonPayload
+      "farm_town_overviews", town.id, "claim_loads", payload
     );
 
-    // CAPTCHA check
     if (typeof data === "string" && (data.includes("captcha") || data.includes("robot"))) {
       throw new Error("CAPTCHA gedetecteerd in response");
     }
 
     if (data?.success) {
-      // claimed_resources_per_resource_type = wat je NET opgehaald hebt per grondstof
-      const claimed  = data.claimed_resources_per_resource_type ?? 0;
-      const storage  = data.resources ?? {};
+      const claimed = data.claimed_resources_per_resource_type ?? 0;
+      const storage = data.resources ?? {};
       return {
-        wood:   claimed,
-        stone:  claimed,
-        iron:   claimed,
+        wood:         claimed,
+        stone:        claimed,
+        iron:         claimed,
         storageWood:  storage.wood  ?? 0,
         storageStone: storage.stone ?? 0,
         storageIron:  storage.iron  ?? 0,
@@ -116,9 +105,7 @@ class GrepolisAPI {
       };
     }
 
-    if (data?.error) {
-      logger.warn(`[API] claim_loads fout: ${data.error}`);
-    }
+    if (data?.error) logger.warn(`[API] claim_loads fout: ${data.error}`);
     return null;
   }
 }
