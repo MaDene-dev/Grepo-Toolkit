@@ -1,17 +1,11 @@
 {
-  "_uitleg": "Hoofdconfiguratiebestand. Pas hier alle instellingen aan.",
+  "_uitleg": "Hoofdconfiguratiebestand. Account-gegevens worden geladen via het GREPO_ACCOUNT GitHub Secret.",
 
   "account": {
-    "world": "nl133",
-    "player_id": 1361000,
-    "towns": [
-      {
-        "id": 329,
-        "name": "Stad van Marcotics",
-        "island_x": 475,
-        "island_y": 503
-      }
-    ]
+    "_uitleg": "Wordt overschreven door GREPO_ACCOUNT secret. Laat deze waarden leeg.",
+    "world":     "",
+    "player_id": 0,
+    "towns":     []
   },
 
   "intervals": {
@@ -23,13 +17,13 @@
   },
 
   "dagschema": {
-    "_uitleg": "Zet 'actief' op true/false om een blok aan of uit te zetten. Tijden zijn Belgisch.",
+    "_uitleg": "Wanneer de bot actief is en welk interval hij gebruikt. Tijden zijn Belgisch.",
     "blokken": [
-      { "actief": false, "van": "00:00", "tot": "06:30", "interval": "D", "_opmerking": "Nacht — uit" },
+      { "actief": false, "van": "00:00", "tot": "06:30", "interval": "D", "_opmerking": "Nacht" },
       { "actief": true,  "van": "06:30", "tot": "12:00", "interval": "A", "_opmerking": "Ochtend" },
       { "actief": true,  "van": "12:00", "tot": "17:30", "interval": "A", "_opmerking": "Middag" },
       { "actief": true,  "van": "17:30", "tot": "23:00", "interval": "A", "_opmerking": "Avond" },
-      { "actief": false, "van": "23:00", "tot": "24:00", "interval": "D", "_opmerking": "Laat — uit" }
+      { "actief": false, "van": "23:00", "tot": "24:00", "interval": "D", "_opmerking": "Laat" }
     ]
   },
 
