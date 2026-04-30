@@ -23,38 +23,22 @@ class GrepolisAPI {
   }
 
   async _fetchTownsFromApi(playerId) {
-    try {
-      // Methode 1: via player_towns endpoint
-      const data = await this.session.gameGet(
-        "player_towns", 0, "get_player_towns",
-        JSON.stringify({ player_id: playerId })
-      );
-      logger.info(`[API] Towns response: ${JSON.stringify(data).substring(0, 200)}`);
-      const list = data?.towns ?? data?.player_towns ?? data?.own_towns ?? [];
-      if (Array.isArray(list) && list.length > 0) {
-        const towns = list.map(t => ({
-          id:       t.id,
-          name:     t.name,
-          island_x: t.island_x ?? 0,
-          island_y: t.island_y ?? 0,
-        }));
-        logger.info(`[API] ${towns.length} steden gevonden: ${towns.map(t => t.name).join(", ")}`);
-        return towns;
+    const html = this.session.lastHtml ?? "";
+    if (!html) return [];
+
+    // Log een stuk van de HTML rond "town" voor diagnose
+    const idx = html.indexOf('"towns"');
+    if (idx > 0) {
+      logger.info(`[API] HTML snippet rond "towns": ${html.substring(idx, idx + 300)}`);
+    } else {
+      // Zoek alternatieve keys
+      for (const key of ["own_towns", "player_towns", "town_list", "DM.loadData"]) {
+        const i = html.indexOf(key);
+        if (i > 0) {
+          logger.info(`[API] HTML snippet rond "${key}": ${html.substring(i, i + 300)}`);
+          break;
+        }
       }
-      // Methode 2: probeer HTML te parsen
-      const html = this.session.lastHtml ?? "";
-      const townMatches = [...html.matchAll(/"own_towns"\s*:\s*(\[[\s\S]*?\])/g)];
-      if (townMatches.length > 0) {
-        try {
-          const parsed = JSON.parse(townMatches[0][1]);
-          if (parsed.length > 0) {
-            logger.info(`[API] ${parsed.length} steden gevonden via HTML`);
-            return parsed.map(t => ({ id: t.id, name: t.name, island_x: t.x ?? 0, island_y: t.y ?? 0 }));
-          }
-        } catch (_) {}
-      }
-    } catch (err) {
-      logger.warn(`[API] Towns API fout: ${err.message}`);
     }
     return [];
   }
