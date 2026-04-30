@@ -10,7 +10,8 @@ if (process.env.GREPO_PASSWORD) config.account.password = process.env.GREPO_PASS
 if (process.env.SMTP_TO)        config.email.to         = process.env.SMTP_TO;
 
 // Laad account-gegevens uit GREPO_ACCOUNT secret (JSON)
-// Format: {"world":"nlXXX","player_id":1234567,"towns":[{"id":123,"name":"Mijn Stad","island_x":100,"island_y":200}]}
+// Format: {"world":"nlXXX","player_id":1234567}
+// towns is optioneel — bot detecteert steden automatisch
 if (process.env.GREPO_ACCOUNT) {
   try {
     const account = JSON.parse(process.env.GREPO_ACCOUNT);
