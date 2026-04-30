@@ -227,8 +227,8 @@ class VillageAgent {
         logger.info(`[Village Agent] Ronde #${this.roundNum} | niets te halen | ${dur}s`);
       }
 
-      // Stuur stats naar dashboard na elke ronde
-      if (this.stats_writer && farms > 0) {
+      // Stuur stats naar dashboard na elke ronde (ook als er niets te halen was)
+      if (this.stats_writer) {
         await this.stats_writer.recordSession(this.stats, this.history);
       }
 
