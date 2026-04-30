@@ -131,7 +131,7 @@ class VillageAgent {
     logger.info(`[Village Agent] ═══════════════════════════════`);
   }
 
-  _schedule(blok) {
+  _schedule(blok, farms = 0) {
     if (!this.running) return;
     if (!blok || !this._isActive()) {
       const wait = (15 + Math.random() * 10) * 60 * 1000;
@@ -140,14 +140,30 @@ class VillageAgent {
       this.timer = setTimeout(() => this.run(), wait);
       return;
     }
-    const delay = this._calcDelay(blok);
+    let delay = this._calcDelay(blok);
+
+    // Als alle dorpen in cooldown zijn maar de cooldown binnen 4 min voorbij is:
+    // Plan de volgende ronde op dat exacte moment
+    if (this._nextReadyAt && farms === 0) {
+      const now = Date.now();
+      const cooldownMs = (this._nextReadyAt * 1000) - now;
+      if (cooldownMs > 0 && cooldownMs < 4 * 60 * 1000) {
+        const cooldownSecs = Math.ceil(cooldownMs / 1000);
+        logger.info(`[Village Agent] Dorpen in cooldown — volgende ophaling over ${cooldownSecs}s (cooldown loopt af)`);
+        delay = cooldownMs + 5000; // 5 seconden buffer na cooldown
+      }
+    }
+    this._nextReadyAt = null; // Reset voor volgende ronde
+
     this.nextRunAt = new Date(Date.now() + delay);
     const rondesLeft = this._estimateRondesLeft(blok);
 
     // Controleer of de volgende run binnen de GitHub Actions auto-stop valt
     if (this.autoStopAt && this.nextRunAt >= this.autoStopAt) {
-      logger.info(`[Village Agent] Volgende ophaling (${this.nextRunAt.toLocaleTimeString("nl-BE", {timeZone:"Europe/Brussels",hour:"2-digit",minute:"2-digit"})}) valt na auto-stop — sessie wordt netjes afgesloten.`);
-      return; // Geen nieuwe timer plannen
+      logger.info(`[Village Agent] Volgende ophaling (${this.nextRunAt.toLocaleTimeString("nl-BE", {timeZone:"Europe/Brussels",hour:"2-digit",minute:"2-digit"})}) valt na auto-stop — netjes afsluiten.`);
+      this.stop();
+      process.exit(0);
+      return;
     }
 
     logger.info(`[Village Agent] Volgende ophaling: ${this.nextRunAt.toLocaleTimeString("nl-BE", {timeZone:"Europe/Brussels",hour:"2-digit",minute:"2-digit",second:"2-digit"})} | nog ~${rondesLeft} rondes in dit blok`);
@@ -253,13 +269,19 @@ class VillageAgent {
       }
     }
 
-    this._schedule(blok);
+    this._schedule(blok, farms);
   }
 
   async _farmTown(town, timeOption) {
     try {
-      const { ready, owned } = await this.api.getFarmOverview(town);
-      if (ready.length === 0) { logger.info(`[Village Agent]   ${town.name}: niets klaar`); return null; }
+      const { ready, owned, nextReady } = await this.api.getFarmOverview(town);
+
+      if (ready.length === 0) {
+        // Bewaar vroegste cooldown-tijdstip voor slimme scheduling
+        if (nextReady) this._nextReadyAt = Math.min(this._nextReadyAt ?? Infinity, nextReady);
+        logger.info(`[Village Agent]   ${town.name}: niets klaar`);
+        return null;
+      }
 
       // Sla occasioneel een enkel dorp over — menselijk gedrag
       const filteredOwned = owned.filter(() => Math.random() > 0.02);
@@ -271,7 +293,7 @@ class VillageAgent {
     } catch (err) {
       if (err.message === "SESSION_EXPIRED") {
         logger.warn(`[Village Agent]   Sessie verlopen tijdens farm — automatisch herverbinden...`);
-        throw err; // Gooi door zodat run() het oppakt
+        throw err;
       }
       logger.error(`[Village Agent]   Fout bij ${town.name}: ${err.message}`);
       throw err;
