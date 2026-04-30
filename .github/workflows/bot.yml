@@ -2,8 +2,7 @@ name: Grepolis Bot
 
 on:
   schedule:
-    - cron: "0 * * * *"    # Elk uur op het hele uur
-    - cron: "30 * * * *"   # Elk uur op het halve uur
+    - cron: "*/50 * * * *"
   workflow_dispatch:
 
 jobs:
