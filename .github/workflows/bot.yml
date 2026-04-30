@@ -7,7 +7,7 @@ on:
 
 concurrency:
   group: grepolis-bot
-  cancel-in-progress: false  # Niet annuleren, gewoon overslaan als er al één loopt
+  cancel-in-progress: true  # Annuleer wachtende runs — enkel de nieuwste telt
 
 jobs:
   run-bot:
