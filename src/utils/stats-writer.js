@@ -15,38 +15,34 @@ class StatsWriter {
     }
     logger.info("[Stats] Versturen naar dashboard...");
 
-    // Haal opslag-info uit de laatste ronde
-    const lastRound = history.length > 0 ? history[history.length - 1] : null;
-
-    // Bereken gemiddelde rondetijd
-    const durations = history.map(r => parseFloat(r.duration)).filter(d => !isNaN(d));
+    const lastRound  = history.length > 0 ? history[history.length - 1] : null;
+    const durations  = history.map(r => parseFloat(r.duration)).filter(d => !isNaN(d));
     const avgDuration = durations.length > 0
       ? (durations.reduce((a, b) => a + b, 0) / durations.length).toFixed(1)
       : 0;
 
     const payload = {
-      world:        this.world,
-      runs:         stats.runs,
-      wood:         stats.totalWood,
-      stone:        stats.totalStone,
-      silver:       stats.totalIron,
-      farms:        stats.totalFarms,
-      failed:       stats.failedRuns,
-      avg_duration: avgDuration,
-      started:      this._sessionStart,
-      ended:        new Date().toISOString(),
-      // Opslag van laatste ronde
+      world:         this.world,
+      runs:          stats.runs,
+      wood:          stats.totalWood,
+      stone:         stats.totalStone,
+      silver:        stats.totalIron,
+      farms:         stats.totalFarms,
+      failed:        stats.failedRuns,
+      avg_duration:  avgDuration,
+      started:       this._sessionStart,
+      ended:         new Date().toISOString(),
       storage_wood:  lastRound?.storageWood  ?? 0,
       storage_stone: lastRound?.storageStone ?? 0,
       storage_iron:  lastRound?.storageIron  ?? 0,
       storage_max:   lastRound?.storageMax   ?? 0,
       rounds: history.slice(-20).map(r => ({
-        time:        r.time,
-        label:       r.label,
-        farms:       r.farms,
-        wood:        r.wood,
-        stone:       r.stone,
-        silver:      r.silver ?? r.iron ?? 0,
+        time:         r.time,
+        label:        r.label,
+        farms:        r.farms,
+        wood:         r.wood,
+        stone:        r.stone,
+        silver:       r.silver ?? r.iron ?? 0,
         storageWood:  r.storageWood  ?? 0,
         storageStone: r.storageStone ?? 0,
         storageIron:  r.storageIron  ?? 0,
@@ -55,54 +51,27 @@ class StatsWriter {
     };
 
     try {
-      // Gebruik node-fetch stijl via axios-achtige aanpak met redirect support
-      // GAS Web App vereist dat POST-methode behouden blijft bij redirects
-      const postWithRedirect = (urlStr, body, secret, maxRedirects = 5) => {
-        return new Promise((resolve) => {
-          const https = require("https");
-          const url   = new URL(urlStr);
+      // Gebruik global fetch (Node 18+) — handelt GAS redirects correct af
+      const body = JSON.stringify(payload);
+      const res  = await fetch(this.gasUrl, {
+        method:  "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Bot-Secret": this.gasSecret,
+        },
+        body,
+        redirect: "follow",
+      });
 
-          const options = {
-            hostname: url.hostname,
-            path:     url.pathname + url.search,
-            method:   "POST",
-            headers: {
-              "Content-Type":   "application/json",
-              "Content-Length": Buffer.byteLength(body),
-              "X-Bot-Secret":   secret,
-            },
-          };
-
-          const req = https.request(options, res => {
-            if ([301,302,307,308].includes(res.statusCode) && res.headers.location && maxRedirects > 0) {
-              const loc = res.headers.location;
-              const newUrl = loc.startsWith("http") ? loc : new URL(loc, urlStr).href;
-              res.resume();
-              // Herstart als POST naar de redirect URL
-              resolve(postWithRedirect(newUrl, body, secret, maxRedirects - 1));
-              return;
-            }
-            let data = "";
-            res.on("data", d => data += d);
-            res.on("end", () => resolve({ status: res.statusCode, body: data }));
-          });
-          req.on("error", err => resolve({ status: 0, body: err.message }));
-          req.setTimeout(15000, () => { req.destroy(); resolve({ status: 0, body: "timeout" }); });
-          req.write(body);
-          req.end();
-        });
-      };
-
-      const body   = JSON.stringify(payload);
-      const result = await postWithRedirect(this.gasUrl, body, this.gasSecret);
-      logger.info(`[Stats] HTTP ${result.status} | ${result.body.substring(0, 150)}`);
+      const text = await res.text();
+      logger.info(`[Stats] HTTP ${res.status} | ${text.substring(0, 150)}`);
       try {
-        const r = JSON.parse(result.body);
+        const r = JSON.parse(text);
         if (r.ok) logger.info("[Stats] Dashboard bijgewerkt ✓");
         else      logger.warn(`[Stats] GAS fout: ${r.error}`);
       } catch (_) {
-        if (result.status === 200) logger.info("[Stats] Dashboard bijgewerkt ✓");
-        else logger.warn(`[Stats] Onverwachte response: ${result.status}`);
+        if (res.ok) logger.info("[Stats] Dashboard bijgewerkt ✓");
+        else        logger.warn(`[Stats] Onverwachte response: ${res.status}`);
       }
     } catch (err) {
       logger.warn(`[Stats] Fout: ${err.message}`);
