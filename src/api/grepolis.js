@@ -23,6 +23,12 @@ class GrepolisAPI {
       JSON.stringify({ town_id: activeTownId, nl_init: true })
     );
 
+    logger.info(`[API] index response type: ${typeof data} | keys: ${data ? Object.keys(data).join(", ") : "null"}`);
+    if (data?.farm_town_list !== undefined) {
+      logger.info(`[API] farm_town_list lengte: ${data.farm_town_list.length}`);
+    }
+    if (data?.error) logger.warn(`[API] index error: ${JSON.stringify(data.error)}`);
+
     const farmList = data?.farm_town_list ?? [];
     if (farmList.length > 0) {
       // Extraheer island coords uit de eerste farm (alle farms zijn op hetzelfde eiland)
