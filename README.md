@@ -12,9 +12,6 @@ grepo-toolkit/
 ├── cookies.json                       ← Wordt aangemaakt via GitHub Secret
 ├── package.json
 ├── .gitignore
-├── docs/
-│   ├── index.html                     ← Dashboard (GitHub Pages)
-│   └── data.json                      ← Stats (automatisch bijgewerkt)
 ├── .github/workflows/
 │   ├── bot.yml                        ← Village Agent (elke 50 min)
 │   ├── daily-report.yml               ← Dagelijks rapport (23u Belgisch)
@@ -31,8 +28,7 @@ grepo-toolkit/
     │   └── village-agent.js           ← Farm logica + dagschema + stats
     └── utils/
         ├── logger.js                  ← Winston, Europe/Brussels tijdzone
-        ├── mailer.js                  ← Nodemailer Gmail
-        └── stats-writer.js            ← Schrijft docs/data.json
+        └── mailer.js                  ← E-mailrapporten
 ```
 
 ---
@@ -58,7 +54,7 @@ Dit is het enige bestand dat je normaal hoeft aan te passen.
 }
 ```
 
-Steden worden automatisch herkend uit de gamepagina. De `towns` lijst dient als fallback en voor het dashboard. Coördinaten vind je via F12 → Netwerk → `farm_town_overviews` request → Payload tab.
+Steden worden automatisch herkend uit de gamepagina. De `towns` lijst dient als fallback. Coördinaten vind je via F12 → Netwerk → `farm_town_overviews` request → Payload tab.
 
 ### Dagschema
 
@@ -82,18 +78,17 @@ Steden worden automatisch herkend uit de gamepagina. De `towns` lijst dient als 
 
 - Zet `actief` op `false` om een blok uit te schakelen
 - Kies interval via de letter A/B/C/D
-- Het dagschema is ook aanpasbaar via het dashboard
 
 ### Overige instellingen
 
 ```json
 "opties": {
-  "extra_pauze_kans":     0.10,
-  "extra_pauze_min_min":  5,
-  "extra_pauze_max_min":  10,
+  "extra_pauze_kans":      0.10,
+  "extra_pauze_min_min":   5,
+  "extra_pauze_max_min":   10,
   "rapport_elke_n_rondes": 999,
-  "captcha_pauze_min":    45,
-  "sessie_refresh_uren":  6
+  "captcha_pauze_min":     45,
+  "sessie_refresh_uren":   6
 }
 ```
 
@@ -111,7 +106,6 @@ Ga naar repo → **Settings → Secrets → Actions → New repository secret**
 | `SMTP_USER` | Jouw Gmail-adres |
 | `SMTP_PASS` | Gmail app-wachtwoord |
 | `SMTP_TO` | Bestemmingsadres voor rapporten |
-| `DASHBOARD_PASSWORD` | Wachtwoord voor het dashboard |
 
 ### Gmail app-wachtwoord aanmaken
 1. Ga naar [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)
@@ -151,23 +145,6 @@ Handmatig starten: **Actions → Grepo Toolkit — Village Agent → Run workflo
 
 ---
 
-## Dashboard
-
-Het dashboard is beschikbaar op `https://JOUW_USERNAME.github.io/grepo-toolkit/`
-
-**Activeren:**
-1. Settings → Pages → Branch: main, map: /docs → Save
-2. Settings → Actions → General → Read and write permissions → Save
-
-**Tabs:**
-- **Status** — grondstoffen grafiek, laatste rondes, opslag per stad
-- **Dagschema** — visuele tijdlijn, blokken aan/uit zetten, interval kiezen
-- **Steden** — steden toevoegen en verwijderen
-
-Wijzigingen in het dashboard worden via de GitHub API direct naar `config.json` gecommit. Je hebt hiervoor een GitHub token nodig (Settings → Developer settings → Personal access tokens → scope: `repo`).
-
----
-
 ## Logs begrijpen
 
 Bij opstart:
@@ -189,6 +166,13 @@ Bij sessie-herstel:
 [Puppeteer] ✓ 16 cookies opgeslagen
 [Village Agent] Sessie hersteld! Snelle ronde over 1 minuut.
 ```
+
+---
+
+## Dagelijks rapport
+
+Elke avond om 23u ontvang je een e-mail met de bot-status en je steden.
+Bij CAPTCHA-detectie of mislukte login ontvang je direct een waarschuwingsmail.
 
 ---
 
