@@ -45,11 +45,15 @@ class Autofarm {
   }
 
   _nlTotalMins() {
+    // Gebruik Intl voor betrouwbare Belgische tijdzone (automatisch zomer/wintertijd)
     const now = new Date();
-    const jan = new Date(now.getFullYear(), 0, 1).getTimezoneOffset();
-    const jul = new Date(now.getFullYear(), 6, 1).getTimezoneOffset();
-    const dst = now.getTimezoneOffset() < Math.max(jan, jul);
-    return (now.getUTCHours() * 60 + now.getUTCMinutes() + (dst ? 120 : 60)) % 1440;
+    const parts = new Intl.DateTimeFormat("nl-BE", {
+      timeZone: "Europe/Brussels",
+      hour: "numeric", minute: "numeric", hour12: false,
+    }).formatToParts(now);
+    const h = parseInt(parts.find(p => p.type === "hour").value);
+    const m = parseInt(parts.find(p => p.type === "minute").value);
+    return h * 60 + m;
   }
 
   _nlTimeStr() {
