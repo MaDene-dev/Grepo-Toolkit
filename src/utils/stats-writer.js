@@ -55,40 +55,55 @@ class StatsWriter {
     };
 
     try {
-      const https = require("https");
-      const url   = new URL(this.gasUrl);
-      const body  = JSON.stringify(payload);
+      // Gebruik node-fetch stijl via axios-achtige aanpak met redirect support
+      const postWithRedirect = (urlStr, body, secret, maxRedirects = 5) => {
+        return new Promise((resolve) => {
+          const https = require("https");
+          const http  = require("http");
+          const url   = new URL(urlStr);
+          const lib   = url.protocol === "https:" ? https : http;
 
-      await new Promise((resolve) => {
-        const req = https.request({
-          hostname: url.hostname,
-          path:     url.pathname + url.search,
-          method:   "POST",
-          headers: {
-            "Content-Type":   "application/json",
-            "X-Bot-Secret":   this.gasSecret,
-            "Content-Length": Buffer.byteLength(body),
-          },
-        }, res => {
-          let data = "";
-          res.on("data", d => data += d);
-          res.on("end", () => {
-            logger.info(`[Stats] HTTP ${res.statusCode} | ${data.substring(0, 200)}`);
-            try {
-              const r = JSON.parse(data);
-              if (r.ok) logger.info("[Stats] Dashboard bijgewerkt ✓");
-              else      logger.warn(`[Stats] GAS fout: ${r.error}`);
-            } catch (e) {
-              logger.warn(`[Stats] JSON parse fout: ${e.message}`);
+          const req = lib.request({
+            hostname: url.hostname,
+            path:     url.pathname + url.search,
+            method:   "POST",
+            headers: {
+              "Content-Type":   "application/json",
+              "X-Bot-Secret":   secret,
+              "Content-Length": Buffer.byteLength(body),
+            },
+          }, res => {
+            // Volg redirects
+            if ([301,302,303,307,308].includes(res.statusCode) && res.headers.location && maxRedirects > 0) {
+              const newUrl = res.headers.location.startsWith("http")
+                ? res.headers.location
+                : new URL(res.headers.location, urlStr).href;
+              res.resume();
+              resolve(postWithRedirect(newUrl, body, secret, maxRedirects - 1));
+              return;
             }
-            resolve();
+            let data = "";
+            res.on("data", d => data += d);
+            res.on("end", () => resolve({ status: res.statusCode, body: data }));
           });
+          req.on("error", err => resolve({ status: 0, body: err.message }));
+          req.setTimeout(15000, () => { req.destroy(); resolve({ status: 0, body: "timeout" }); });
+          req.write(body);
+          req.end();
         });
-        req.on("error", err => { logger.warn(`[Stats] POST mislukt: ${err.message}`); resolve(); });
-        req.setTimeout(10000, () => { logger.warn("[Stats] Timeout na 10s"); req.destroy(); resolve(); });
-        req.write(body);
-        req.end();
-      });
+      };
+
+      const body   = JSON.stringify(payload);
+      const result = await postWithRedirect(this.gasUrl, body, this.gasSecret);
+      logger.info(`[Stats] HTTP ${result.status} | ${result.body.substring(0, 150)}`);
+      try {
+        const r = JSON.parse(result.body);
+        if (r.ok) logger.info("[Stats] Dashboard bijgewerkt ✓");
+        else      logger.warn(`[Stats] GAS fout: ${r.error}`);
+      } catch (_) {
+        if (result.status === 200) logger.info("[Stats] Dashboard bijgewerkt ✓");
+        else logger.warn(`[Stats] Onverwachte response: ${result.status}`);
+      }
     } catch (err) {
       logger.warn(`[Stats] Fout: ${err.message}`);
     }
