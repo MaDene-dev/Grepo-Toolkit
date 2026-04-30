@@ -5,7 +5,8 @@
     "_uitleg": "Wordt overschreven door GREPO_ACCOUNT secret. Laat deze waarden leeg.",
     "world":     "",
     "player_id": 0,
-    "towns":     []
+    "towns":     [],
+    "_towns_uitleg": "Hoeft niet ingevuld te worden — bot detecteert steden automatisch uit de gamepagina."
   },
 
   "intervals": {
