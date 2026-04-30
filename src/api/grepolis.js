@@ -3,83 +3,62 @@ const logger = require("../utils/logger");
 class GrepolisAPI {
   constructor(session) {
     this.session = session;
+    this._towns  = null; // Cache voor steden + island coords
   }
 
   async getTowns() {
-    // Stap 1: Haal town IDs op via toid cookie + game session
-    const towns = await this._getTownsFromSession();
-    if (towns.length > 0) return towns;
+    if (this._towns?.length > 0) return this._towns;
 
-    // Stap 2: Fallback naar config/secret
+    // Haal actief town ID op via toid cookie
+    const cookies = await this.session.jar.getCookies(this.session.baseUrl);
+    const toidCookie = cookies.find(c => c.key === "toid");
+    if (!toidCookie) throw new Error("Geen toid cookie gevonden — sessie niet geldig.");
+
+    const activeTownId = parseInt(toidCookie.value);
+    logger.info(`[API] Actief town ID: ${activeTownId}`);
+
+    // Gebruik action=index (zoals de browser) — geeft farm_town_list incl. island coords
+    const data = await this.session.gameGet(
+      "farm_town_overviews", activeTownId, "index",
+      JSON.stringify({ town_id: activeTownId, nl_init: true })
+    );
+
+    const farmList = data?.farm_town_list ?? [];
+    if (farmList.length > 0) {
+      // Extraheer island coords uit de eerste farm (alle farms zijn op hetzelfde eiland)
+      const ix = farmList[0].island_x;
+      const iy = farmList[0].island_y;
+      logger.info(`[API] Island coords: x=${ix} y=${iy}`);
+
+      this._towns = [{
+        id:       activeTownId,
+        name:     `Stad ${activeTownId}`,
+        island_x: ix,
+        island_y: iy,
+      }];
+      logger.info(`[API] Stad ${activeTownId} geconfigureerd (x=${ix}, y=${iy})`);
+      return this._towns;
+    }
+
+    // Fallback: config/secret
     if (this.session.config.account.towns?.length > 0) {
-      logger.info(`[API] ${this.session.config.account.towns.length} steden uit config`);
-      return this.session.config.account.towns;
+      logger.info(`[API] Steden uit config gebruikt`);
+      this._towns = this.session.config.account.towns;
+      return this._towns;
     }
 
     throw new Error("Geen steden gevonden. Voeg towns toe aan het GREPO_ACCOUNT secret.");
   }
 
-  async _getTownsFromSession() {
-    try {
-      // Haal actief town ID op uit toid cookie
-      const cookies = await this.session.jar.getCookies(this.session.baseUrl);
-      const toidCookie = cookies.find(c => c.key === "toid");
-      if (!toidCookie) return [];
-
-      const activeTownId = parseInt(toidCookie.value);
-      logger.info(`[API] Actief town ID via cookie: ${activeTownId}`);
-
-      // Probe call: farm_town_overviews met nl_init=true geeft extra game data terug
-      // Coördinaten 0,0 — Grepolis gebruikt enkel town_id voor server-side lookup
-      const payload = JSON.stringify({
-        island_x: 0, island_y: 0,
-        current_town_id: activeTownId,
-        booty_researched: "", diplomacy_researched: "",
-        trade_office: 0, town_id: activeTownId, nl_init: true,
-      });
-
-      const data = await this.session.gameGet(
-        "farm_town_overviews", activeTownId,
-        "get_farm_towns_for_town", payload
-      );
-
-      // nl_init response bevat player_towns met alle steden
-      if (data?.player_towns) {
-        const list = Array.isArray(data.player_towns)
-          ? data.player_towns
-          : Object.values(data.player_towns);
-        if (list.length > 0) {
-          const towns = list.map(t => ({
-            id: t.id, name: t.name,
-            island_x: t.island_x ?? t.x ?? 0,
-            island_y: t.island_y ?? t.y ?? 0,
-          }));
-          logger.info(`[API] ${towns.length} steden gevonden: ${towns.map(t => t.name).join(", ")}`);
-          return towns;
-        }
-      }
-
-      // Log wat de nl_init response bevat voor diagnose
-      const keys = data ? Object.keys(data).join(", ") : "leeg";
-      logger.info(`[API] nl_init response keys: ${keys}`);
-
-      // Als nl_init geen towns geeft, gebruik toch het actieve town met 0,0 coords
-      // farm_town_overviews werkt op basis van town_id, island coords zijn optioneel
-      if (data?.farm_town_list !== undefined) {
-        logger.info(`[API] Werkt zonder island coords — gebruik town ${activeTownId}`);
-        return [{ id: activeTownId, name: `Stad ${activeTownId}`, island_x: 0, island_y: 0 }];
-      }
-
-    } catch (err) {
-      logger.warn(`[API] Session towns fout: ${err.message}`);
-    }
-    return [];
+  // Reset towns cache bij sessie-herstel
+  resetTowns() {
+    this._towns = null;
   }
 
   async getFarmOverview(town) {
     const payload = JSON.stringify({
-      island_x:             town.island_x ?? 0,
-      island_y:             town.island_y ?? 0,
+      island_x:             town.island_x,
+      island_y:             town.island_y,
       current_town_id:      town.id,
       booty_researched:     "",
       diplomacy_researched: "",
@@ -104,6 +83,15 @@ class GrepolisAPI {
     if (owned.length === 0 && !data?.farm_town_list) {
       logger.warn(`[API] Lege response voor ${town.name} — mogelijk verlopen sessie`);
       throw new Error("SESSION_EXPIRED");
+    }
+
+    // Update island coords in cache als ze beschikbaar zijn in de response
+    if (owned.length > 0 && this._towns) {
+      const t = this._towns.find(t => t.id === town.id);
+      if (t && owned[0].island_x) {
+        t.island_x = owned[0].island_x;
+        t.island_y = owned[0].island_y;
+      }
     }
 
     const cooldowns = owned.filter(v => v.loot && v.loot > now).map(v => v.loot);
