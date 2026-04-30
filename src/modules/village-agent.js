@@ -143,6 +143,13 @@ class VillageAgent {
     const delay = this._calcDelay(blok);
     this.nextRunAt = new Date(Date.now() + delay);
     const rondesLeft = this._estimateRondesLeft(blok);
+
+    // Controleer of de volgende run binnen de GitHub Actions auto-stop valt
+    if (this.autoStopAt && this.nextRunAt >= this.autoStopAt) {
+      logger.info(`[Village Agent] Volgende ophaling (${this.nextRunAt.toLocaleTimeString("nl-BE", {timeZone:"Europe/Brussels",hour:"2-digit",minute:"2-digit"})}) valt na auto-stop — sessie wordt netjes afgesloten.`);
+      return; // Geen nieuwe timer plannen
+    }
+
     logger.info(`[Village Agent] Volgende ophaling: ${this.nextRunAt.toLocaleTimeString("nl-BE", {timeZone:"Europe/Brussels",hour:"2-digit",minute:"2-digit",second:"2-digit"})} | nog ~${rondesLeft} rondes in dit blok`);
     this.timer = setTimeout(() => this.run(), delay);
   }
