@@ -54,32 +54,21 @@ class GrepolisAPI {
 
   resetTowns() { this._towns = null; }
 
-  // ── Farm overview voor alle steden tegelijk ────────────────
-  async getFarmOverview(towns) {
-    // Gebruik get_farm_towns_from_multiple_towns als er meerdere steden zijn
-    const townIds    = towns.map(t => t.id);
-    const activeTown = towns[0];
-
-    const action  = townIds.length > 1
-      ? "get_farm_towns_from_multiple_towns"
-      : "get_farm_towns_for_town";
-
-    // Gebruik exact de payload die de browser stuurt
-    const payload = townIds.length > 1
-      ? JSON.stringify({ town_ids: townIds, town_id: activeTown.id, nl_init: true })
-      : JSON.stringify({
-          island_x:             activeTown.island_x ?? 0,
-          island_y:             activeTown.island_y ?? 0,
-          current_town_id:      activeTown.id,
-          booty_researched:     activeTown.booty_researched ? "1" : "",
-          diplomacy_researched: "",
-          trade_office:         0,
-          town_id:              activeTown.id,
-          nl_init:              false,
-        });
+  // ── Farm overview per stad (bewezen werkende aanpak) ────────
+  async getFarmOverview(town) {
+    const payload = JSON.stringify({
+      island_x:             town.island_x ?? 0,
+      island_y:             town.island_y ?? 0,
+      current_town_id:      town.id,
+      booty_researched:     town.booty_researched ? "1" : "",
+      diplomacy_researched: "",
+      trade_office:         0,
+      town_id:              town.id,
+      nl_init:              false,
+    });
 
     const data = await this.session.gameGet(
-      "farm_town_overviews", activeTown.id, action, payload
+      "farm_town_overviews", town.id, "get_farm_towns_for_town", payload
     );
 
     if (typeof data === "string" && (data.includes("captcha") || data.includes("robot"))) {
@@ -92,7 +81,7 @@ class GrepolisAPI {
     const ready    = owned.filter(v => !v.loot || v.loot < now);
 
     if (owned.length === 0 && !data?.farm_town_list) {
-      logger.warn(`[API] Lege response — mogelijk verlopen sessie`);
+      logger.warn(`[API] Lege response voor ${town.name} — mogelijk verlopen sessie`);
       throw new Error("SESSION_EXPIRED");
     }
 
@@ -101,9 +90,9 @@ class GrepolisAPI {
 
     if (nextReady && ready.length === 0) {
       const minsLeft = Math.ceil((nextReady - now) / 60);
-      logger.info(`[API] ${owned.length} dorpen, ${ready.length} klaar (eerste klaar over ~${minsLeft} min)`);
+      logger.info(`[API] ${town.name}: ${owned.length} dorpen, ${ready.length} klaar (eerste klaar over ~${minsLeft} min)`);
     } else {
-      logger.info(`[API] ${owned.length} dorpen, ${ready.length} klaar`);
+      logger.info(`[API] ${town.name}: ${owned.length} dorpen, ${ready.length} klaar`);
     }
 
     return { owned, ready, nextReady };
