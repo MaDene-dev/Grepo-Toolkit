@@ -218,10 +218,18 @@ class VillageAgent {
       if (this.history.length > 50) this.history.shift();
 
       if (farms > 0) {
-        const opslag = lastStorage
-          ? ` | opslag: 🪵${lastStorage.storageWood} 🪨${lastStorage.storageStone} 🪙${lastStorage.storageIron}/${lastStorage.storageMax}`
-          : "";
-        logger.info(`[Village Agent] ✓ Ronde #${this.roundNum} | ${farms} dorpen | opgehaald: 🪵${wood} 🪨${stone} 🪙${iron}${opslag} | ${dur}s`);
+        // Bouw opslag-string met percentages
+        let opslagStr = "";
+        if (lastStorage && lastStorage.storageMax > 0) {
+          const pctW = Math.round(lastStorage.storageWood  / lastStorage.storageMax * 100);
+          const pctS = Math.round(lastStorage.storageStone / lastStorage.storageMax * 100);
+          const pctI = Math.round(lastStorage.storageIron  / lastStorage.storageMax * 100);
+          const warnW = pctW >= 90 ? "⚠️" : pctW >= 80 ? "!" : "";
+          const warnS = pctS >= 90 ? "⚠️" : pctS >= 80 ? "!" : "";
+          const warnI = pctI >= 90 ? "⚠️" : pctI >= 80 ? "!" : "";
+          opslagStr = ` | opslag: 🪵${pctW}%${warnW} 🪨${pctS}%${warnS} 🪙${pctI}%${warnI} (cap:${lastStorage.storageMax})`;
+        }
+        logger.info(`[Village Agent] ✓ Ronde #${this.roundNum} | ${farms} dorpen | opgehaald: 🪵${wood} 🪨${stone} 🪙${iron}${opslagStr} | ${dur}s`);
         logger.info(`[Village Agent] Cumulatief | 🪵${this.stats.totalWood} 🪨${this.stats.totalStone} 🪙${this.stats.totalIron} | ${this.stats.runs} rondes`);
       } else {
         logger.info(`[Village Agent] Ronde #${this.roundNum} | niets te halen | ${dur}s`);
