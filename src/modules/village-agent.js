@@ -187,17 +187,13 @@ class VillageAgent {
 
     try {
       const towns = await this.api.getTowns();
-      for (const town of towns) {
-        const r = await this._farmTown(town, blok.interval.time_option);
-        if (r) {
-          wood  += r.wood  ?? 0;
-          stone += r.stone ?? 0;
-          iron  += r.iron  ?? 0;
-          farms += r.farms ?? 0;
-          if (r.storageWood !== undefined) lastStorage = r;
-          await this._sleep(2000 + Math.random() * 3000);
-        }
-      }
+      // Haal farm overview op voor alle steden tegelijk
+      const overview = await this._farmAllTowns(towns, blok.key);
+      wood  += overview.wood  ?? 0;
+      stone += overview.stone ?? 0;
+      iron  += overview.iron  ?? 0;
+      farms += overview.farms ?? 0;
+      if (overview.storageWood !== undefined) lastStorage = overview;
 
       this.stats.totalWood  += wood;
       this.stats.totalStone += stone;
@@ -279,33 +275,36 @@ class VillageAgent {
     this._schedule(blok, farms);
   }
 
-  async _farmTown(town, timeOption) {
+  async _farmAllTowns(towns, intervalKey) {
     try {
-      const { ready, owned, nextReady } = await this.api.getFarmOverview(town);
+      // Haal farm overview op voor alle steden tegelijk
+      const { ready, owned, nextReady } = await this.api.getFarmOverview(towns);
 
       if (ready.length === 0) {
-        // Bewaar vroegste cooldown-tijdstip voor slimme scheduling
         if (nextReady) this._nextReadyAt = Math.min(this._nextReadyAt ?? Infinity, nextReady);
-        logger.info(`[Village Agent]   ${town.name}: niets klaar`);
-        return null;
+        logger.info(`[Village Agent]   Geen dorpen klaar`);
+        return { wood:0, stone:0, iron:0, farms:0 };
       }
 
-      // Sla occasioneel een enkel dorp over — menselijk gedrag
+      // Sla occasioneel een enkel dorp over — menselijk gedrag (2% kans)
       const filteredOwned = owned.filter(() => Math.random() > 0.02);
-      if (filteredOwned.length === 0) { logger.info(`[Village Agent]   ${town.name}: overgeslagen (menselijk gedrag)`); return null; }
+      if (filteredOwned.length === 0) {
+        logger.info(`[Village Agent]   Alle dorpen overgeslagen (menselijk gedrag)`);
+        return { wood:0, stone:0, iron:0, farms:0 };
+      }
 
       await this._sleep(400 + Math.random() * 800);
-      const result = await this.api.claimLoads(town, filteredOwned.map(v => v.id), timeOption);
+      const result = await this.api.claimLoads(towns, filteredOwned.map(v => v.id), intervalKey);
       if (result) return { ...result, farms: ready.length };
     } catch (err) {
       if (err.message === "SESSION_EXPIRED") {
-        logger.warn(`[Village Agent]   Sessie verlopen tijdens farm — automatisch herverbinden...`);
+        logger.warn(`[Village Agent]   Sessie verlopen — automatisch herverbinden...`);
         throw err;
       }
-      logger.error(`[Village Agent]   Fout bij ${town.name}: ${err.message}`);
+      logger.error(`[Village Agent]   Fout bij farm: ${err.message}`);
       throw err;
     }
-    return null;
+    return { wood:0, stone:0, iron:0, farms:0 };
   }
 
   async _handleCaptcha(message) {
