@@ -218,16 +218,18 @@ class VillageAgent {
       if (this.history.length > 50) this.history.shift();
 
       if (farms > 0) {
-        // Bouw opslag-string met percentages
+        // Bouw opslag-string met percentages per stad
         let opslagStr = "";
-        if (lastStorage && lastStorage.storageMax > 0) {
-          const pctW = Math.round(lastStorage.storageWood  / lastStorage.storageMax * 100);
-          const pctS = Math.round(lastStorage.storageStone / lastStorage.storageMax * 100);
-          const pctI = Math.round(lastStorage.storageIron  / lastStorage.storageMax * 100);
-          const warnW = pctW >= 90 ? "⚠️" : pctW >= 80 ? "!" : "";
-          const warnS = pctS >= 90 ? "⚠️" : pctS >= 80 ? "!" : "";
-          const warnI = pctI >= 90 ? "⚠️" : pctI >= 80 ? "!" : "";
-          opslagStr = ` | opslag: 🪵${pctW}%${warnW} 🪨${pctS}%${warnS} 🪙${pctI}%${warnI} (cap:${lastStorage.storageMax})`;
+        const storages = overview.townStorages ?? [];
+        if (storages.length > 0) {
+          opslagStr = " | opslag: " + storages.map(s => {
+            if (!s.max) return "";
+            const pW = Math.round(s.wood /s.max*100);
+            const pS = Math.round(s.stone/s.max*100);
+            const pI = Math.round(s.iron /s.max*100);
+            const w = x => x>=90?"⚠️":x>=80?"!":"";
+            return `${s.name} 🪵${pW}%${w(pW)} 🪨${pS}%${w(pS)} 🪙${pI}%${w(pI)}`;
+          }).filter(Boolean).join(" | ");
         }
         logger.info(`[Village Agent] ✓ Ronde #${this.roundNum} | ${farms} dorpen | opgehaald: 🪵${wood} 🪨${stone} 🪙${iron}${opslagStr} | ${dur}s`);
         logger.info(`[Village Agent] Cumulatief | 🪵${this.stats.totalWood} 🪨${this.stats.totalStone} 🪙${this.stats.totalIron} | ${this.stats.runs} rondes`);
@@ -353,6 +355,7 @@ class VillageAgent {
     // Stap 3: claim per stad, tel totalen correct op
     let totalWood = 0, totalStone = 0, totalIron = 0, totalFarms = 0;
     let bestStorage = null; // opslag van de grootste stad
+    const townStorages = []; // per-stad opslag voor logging
 
     for (let i = 0; i < townsToFarm.length; i++) {
       const { town, owned, ready } = townsToFarm[i];
@@ -373,6 +376,13 @@ class VillageAgent {
           if (!bestStorage || (result.storageMax ?? 0) > (bestStorage.storageMax ?? 0)) {
             bestStorage = result;
           }
+          townStorages.push({
+            name:  town.name,
+            wood:  result.storageWood,
+            stone: result.storageStone,
+            iron:  result.storageIron,
+            max:   result.storageMax,
+          });
         } else {
           logger.warn(`[Village Agent]   ${town.name}: claim geen resultaat`);
         }
@@ -390,6 +400,7 @@ class VillageAgent {
       storageStone: bestStorage?.storageStone ?? 0,
       storageIron:  bestStorage?.storageIron  ?? 0,
       storageMax:   bestStorage?.storageMax   ?? 0,
+      townStorages, // per-stad opslag voor logging
     };
   }
 
