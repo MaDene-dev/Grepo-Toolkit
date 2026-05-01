@@ -145,13 +145,14 @@ class VillageAgent {
 
     // Als alle dorpen in cooldown zijn maar de cooldown binnen 4 min voorbij is:
     // Plan de volgende ronde op dat exacte moment
-    if (this._nextReadyAt && farms === 0) {
+    const nextReady = this._nextReadyAt && isFinite(this._nextReadyAt) ? this._nextReadyAt : null;
+    if (nextReady && farms === 0) {
       const now = Date.now();
-      const cooldownMs = (this._nextReadyAt * 1000) - now;
+      const cooldownMs = (nextReady * 1000) - now;
       if (cooldownMs > 0 && cooldownMs < 4 * 60 * 1000) {
         const cooldownSecs = Math.ceil(cooldownMs / 1000);
         logger.info(`[Village Agent] Dorpen in cooldown — volgende ophaling over ${cooldownSecs}s (cooldown loopt af)`);
-        delay = cooldownMs + 5000; // 5 seconden buffer na cooldown
+        delay = Math.max(cooldownMs + 5000, 60_000); // Minimum 1 minuut
       }
     }
     this._nextReadyAt = null; // Reset voor volgende ronde
@@ -284,7 +285,9 @@ class VillageAgent {
         const { owned, ready, nextReady } = await this.api.getFarmOverview(town);
         allOwned.push(...owned);
         allReady.push(...ready);
-        if (nextReady) earliestCooldown = Math.min(earliestCooldown ?? Infinity, nextReady);
+        if (nextReady && isFinite(nextReady)) {
+          earliestCooldown = earliestCooldown ? Math.min(earliestCooldown, nextReady) : nextReady;
+        }
         await this._sleep(500 + Math.random() * 500);
       } catch (err) {
         if (err.message === "SESSION_EXPIRED") throw err;
@@ -293,7 +296,9 @@ class VillageAgent {
     }
 
     if (allReady.length === 0) {
-      if (earliestCooldown) this._nextReadyAt = earliestCooldown;
+      if (earliestCooldown && isFinite(earliestCooldown)) {
+        this._nextReadyAt = earliestCooldown;
+      }
       logger.info(`[Village Agent]   Geen dorpen klaar`);
       return { wood:0, stone:0, iron:0, farms:0 };
     }
