@@ -18,8 +18,8 @@
     },
     "C": {
       "jitter_minutes": 10,
-      "interval_minutes": 180,
       "label": "3u",
+      "interval_minutes": 180,
       "time_option_booty": 10800,
       "time_option_base": 5400
     },
@@ -35,7 +35,7 @@
     "_uitleg": "Wanneer de bot actief is en welk interval hij gebruikt. Tijden zijn Belgisch.",
     "blokken": [
       {
-        "tot": "06:30",
+        "tot": "05:00",
         "van": "00:00",
         "interval": "D",
         "_opmerking": "Nacht",
@@ -71,18 +71,6 @@
       }
     ]
   },
-  "account": {
-    "_uitleg": "Wordt overschreven door GREPO_ACCOUNT secret. Laat deze waarden leeg.",
-    "world": "",
-    "player_id": 0,
-    "_towns_uitleg": "Hoeft niet ingevuld te worden ? bot detecteert steden automatisch uit de gamepagina.",
-    "towns": []
-  },
-  "email": {
-    "smtp_port": 587,
-    "smtp_host": "smtp.gmail.com",
-    "enabled": true
-  },
   "opties": {
     "sessie_refresh_uren": 6,
     "extra_pauze_min_min": 5,
@@ -90,5 +78,17 @@
     "rapport_elke_n_rondes": 999,
     "extra_pauze_kans": 0.1,
     "captcha_pauze_min": 45
+  },
+  "email": {
+    "smtp_port": 587,
+    "smtp_host": "smtp.gmail.com",
+    "enabled": true
+  },
+  "account": {
+    "_uitleg": "Wordt overschreven door GREPO_ACCOUNT secret. Laat deze waarden leeg.",
+    "player_id": 0,
+    "world": "",
+    "_towns_uitleg": "Hoeft niet ingevuld te worden ? bot detecteert steden automatisch uit de gamepagina.",
+    "towns": []
   }
 }
