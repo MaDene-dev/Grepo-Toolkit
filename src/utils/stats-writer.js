@@ -53,7 +53,11 @@ class StatsWriter {
     try {
       // Gebruik global fetch (Node 18+) — handelt GAS redirects correct af
       const body = JSON.stringify(payload);
-      const res  = await fetch(this.gasUrl, {
+      // Stuur secret zowel als header als URL parameter
+      // Headers worden soms weggegooid bij GAS redirects
+      const url  = new URL(this.gasUrl);
+      url.searchParams.set("secret", this.gasSecret);
+      const res  = await fetch(url.toString(), {
         method:  "POST",
         headers: {
           "Content-Type": "application/json",
