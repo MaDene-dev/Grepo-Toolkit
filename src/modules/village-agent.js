@@ -307,23 +307,44 @@ class VillageAgent {
       return { wood:0, stone:0, iron:0, farms:0 };
     }
 
-    // Stap 2: veiligheidscheck opslag — skip als 2 van 3 resources overlopen
-    for (const { town, ready } of townsWithReady) {
-      const skip = await this._shouldSkipForStorage(town, ready.length, intervalKey);
-      if (skip) {
-        logger.info(`[Village Agent]   ${town.name}: ophaling overgeslagen — opslag bijna vol`);
-        townResults.find(r => r.town.id === town.id).ready = [];
+    // Stap 2: veiligheidscheck opslag per stad
+    const townsData = await this.api.getTowns();
+    for (const tr of townsWithReady) {
+      const townData = townsData.find(t => t.id === tr.town.id);
+      if (!townData?.storage_volume) continue;
+
+      const cap   = townData.storage_volume;
+      const wood  = townData.wood  ?? 0;
+      const stone = townData.stone ?? 0;
+      const iron  = townData.iron  ?? 0;
+      const opts  = this.intervals[intervalKey];
+      const gain  = tr.town.booty_researched
+        ? (opts?.time_option_booty ?? 600) / 600 * 255 * tr.ready.length
+        : (opts?.time_option_base  ?? 300) / 300 * 80  * tr.ready.length;
+
+      const overflows = [
+        wood  + gain > cap * 0.95,
+        stone + gain > cap * 0.95,
+        iron  + gain > cap * 0.95,
+      ].filter(Boolean).length;
+
+      if (overflows >= 2) {
+        const pctW = Math.round(wood/cap*100);
+        const pctS = Math.round(stone/cap*100);
+        const pctI = Math.round(iron/cap*100);
+        logger.info(`[Village Agent]   ${tr.town.name}: ophaling overgeslagen — opslag bijna vol (🪵${pctW}% 🪨${pctS}% 🪙${pctI}%)`);
+        tr.skip = true;
       }
     }
 
-    const townsToFarm = townResults.filter(r => r.ready.length > 0);
+    const townsToFarm = townsWithReady.filter(r => !r.skip);
     if (townsToFarm.length === 0) return { wood:0, stone:0, iron:0, farms:0 };
 
     await this._sleep(400 + Math.random() * 800);
 
-    // Stap 3: claim per stad
+    // Stap 3: claim per stad, tel totalen correct op
     let totalWood = 0, totalStone = 0, totalIron = 0, totalFarms = 0;
-    let lastStorage = null;
+    let bestStorage = null; // opslag van de grootste stad
 
     for (let i = 0; i < townsToFarm.length; i++) {
       const { town, owned, ready } = townsToFarm[i];
@@ -335,13 +356,15 @@ class VillageAgent {
       try {
         const result = await this.api.claimLoads([town], filtered.map(v => v.id), intervalKey);
         if (result) {
-          // Log per stad wat er opgehaald werd
           logger.info(`[Village Agent]   ${town.name}: +🪵${result.wood} +🪨${result.stone} +🪙${result.iron} (${ready.length} dorpen)`);
           totalWood  += result.wood  ?? 0;
           totalStone += result.stone ?? 0;
           totalIron  += result.iron  ?? 0;
           totalFarms += ready.length;
-          if (result.storageMax) lastStorage = result;
+          // Bewaar opslag van de stad met de grootste cap
+          if (!bestStorage || (result.storageMax ?? 0) > (bestStorage.storageMax ?? 0)) {
+            bestStorage = result;
+          }
         } else {
           logger.warn(`[Village Agent]   ${town.name}: claim geen resultaat`);
         }
@@ -353,39 +376,16 @@ class VillageAgent {
     }
 
     if (totalFarms === 0) return { wood:0, stone:0, iron:0, farms:0 };
-    return { wood: totalWood, stone: totalStone, iron: totalIron, farms: totalFarms, ...lastStorage };
+    return {
+      wood: totalWood, stone: totalStone, iron: totalIron, farms: totalFarms,
+      storageWood:  bestStorage?.storageWood  ?? 0,
+      storageStone: bestStorage?.storageStone ?? 0,
+      storageIron:  bestStorage?.storageIron  ?? 0,
+      storageMax:   bestStorage?.storageMax   ?? 0,
+    };
   }
 
-  // Veiligheidscheck: skip ophaling als 2 van 3 resources overlopen bij ophaling
-  async _shouldSkipForStorage(town, readyCount, intervalKey) {
-    try {
-      // Haal huidige resources + opslag op uit de towns cache
-      const townsData = await this.api.getTowns();
-      const townData  = townsData.find(t => t.id === town.id);
-      if (!townData || !townData.storage_volume) return false;
-
-      const cap   = townData.storage_volume;
-      const wood  = townData.wood  ?? 0;
-      const stone = townData.stone ?? 0;
-      const iron  = townData.iron  ?? 0;
-
-      // Schat hoeveel er opgehaald wordt
-      const opts   = this.intervals[intervalKey];
-      const gain   = town.booty_researched
-        ? (opts.time_option_booty ?? 600) / 600 * 250 * readyCount  // ruwe schatting
-        : (opts.time_option_base  ?? 300) / 300 * 80  * readyCount;
-
-      const wouldOverflow = [
-        wood  + gain > cap * 0.95,
-        stone + gain > cap * 0.95,
-        iron  + gain > cap * 0.95,
-      ].filter(Boolean).length;
-
-      return wouldOverflow >= 2;
-    } catch (_) {
-      return false; // Bij twijfel: farm gewoon
-    }
-  }
+  // Veiligheidscheck verplaatst naar inline in _farmAllTowns hierboven
 
   async _handleCaptcha(message) {
     if (!message?.toLowerCase().match(/captcha|robot|verificat|beveil/)) return;
