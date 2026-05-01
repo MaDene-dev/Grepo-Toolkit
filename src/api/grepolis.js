@@ -60,34 +60,26 @@ class GrepolisAPI {
     const townIds    = towns.map(t => t.id);
     const activeTown = towns[0];
 
-    const payload = JSON.stringify({
-      town_ids:             townIds,
-      town_id:              activeTown.id,
-      nl_init:              townIds.length > 1,
-      booty_researched:     activeTown.booty_researched ? "1" : "",
-      diplomacy_researched: "",
-      trade_office:         0,
-    });
-
-    const action = townIds.length > 1
+    const action  = townIds.length > 1
       ? "get_farm_towns_from_multiple_towns"
       : "get_farm_towns_for_town";
 
-    // Voor single town: gebruik island coords
-    const singlePayload = JSON.stringify({
-      island_x:             activeTown.island_x ?? 0,
-      island_y:             activeTown.island_y ?? 0,
-      current_town_id:      activeTown.id,
-      booty_researched:     activeTown.booty_researched ? "1" : "",
-      diplomacy_researched: "",
-      trade_office:         0,
-      town_id:              activeTown.id,
-      nl_init:              false,
-    });
+    // Gebruik exact de payload die de browser stuurt
+    const payload = townIds.length > 1
+      ? JSON.stringify({ town_ids: townIds, town_id: activeTown.id, nl_init: true })
+      : JSON.stringify({
+          island_x:             activeTown.island_x ?? 0,
+          island_y:             activeTown.island_y ?? 0,
+          current_town_id:      activeTown.id,
+          booty_researched:     activeTown.booty_researched ? "1" : "",
+          diplomacy_researched: "",
+          trade_office:         0,
+          town_id:              activeTown.id,
+          nl_init:              false,
+        });
 
     const data = await this.session.gameGet(
-      "farm_town_overviews", activeTown.id, action,
-      townIds.length > 1 ? payload : singlePayload
+      "farm_town_overviews", activeTown.id, action, payload
     );
 
     if (typeof data === "string" && (data.includes("captcha") || data.includes("robot"))) {
