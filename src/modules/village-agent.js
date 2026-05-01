@@ -80,7 +80,9 @@ class VillageAgent {
   }
 
   _calcDelay(blok) {
-    const minDelay = blok.interval.time_option * 1000 + 30_000;
+    // Gebruik time_option_booty als fallback (meest voorkomende geval)
+    const timeOption = blok.interval.time_option_booty ?? blok.interval.time_option ?? 600;
+    const minDelay = timeOption * 1000 + 30_000;
     const base     = blok.interval.interval_minutes * 60 * 1000;
 
     // Log-normaal verdeelde jitter — menselijker dan uniform random
@@ -121,7 +123,7 @@ class VillageAgent {
     schema.blokken.forEach(b => {
       const iv  = this.intervals[b.interval];
       const aan = b.actief ? "✓" : "✗";
-      logger.info(`[Village Agent]   ${aan} ${b.van}–${b.tot} → ${b.interval} (${iv.label}, elke ~${iv.interval_minutes} min)`);
+      logger.info(`[Village Agent]   ${aan} ${b.van}–${b.tot} → ${b.interval} (${iv?.label}, elke ~${iv?.interval_minutes} min)`);
     });
 
     if (actief && blok) {
