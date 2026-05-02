@@ -68,6 +68,13 @@
         "interval": "A",
         "_opmerking": "Extra Nachtdienst",
         "actief": true
+      },
+      {
+        "actief": false,
+        "van": "01:00",
+        "tot": "05:00",
+        "interval": "A",
+        "_opmerking": "Nieuw blok"
       }
     ]
   },
