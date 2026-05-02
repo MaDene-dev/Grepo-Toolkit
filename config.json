@@ -35,11 +35,11 @@
     "_uitleg": "Wanneer de bot actief is en welk interval hij gebruikt. Tijden zijn Belgisch.",
     "blokken": [
       {
-        "tot": "05:00",
+        "tot": "01:00",
         "van": "00:00",
         "interval": "D",
         "_opmerking": "Nacht",
-        "actief": false
+        "actief": true
       },
       {
         "tot": "12:00",
