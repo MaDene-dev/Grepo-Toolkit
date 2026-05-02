@@ -63,18 +63,13 @@
         "actief": true
       },
       {
-        "tot": "01:00",
+        "tot": "00:00",
         "van": "23:00",
         "interval": "A",
         "_opmerking": "Extra Nachtdienst",
         "actief": true
       }
     ]
-  },
-  "email": {
-    "smtp_port": 587,
-    "smtp_host": "smtp.gmail.com",
-    "enabled": true
   },
   "opties": {
     "sessie_refresh_uren": 6,
@@ -83,6 +78,11 @@
     "rapport_elke_n_rondes": 999,
     "extra_pauze_kans": 0.1,
     "captcha_pauze_min": 45
+  },
+  "email": {
+    "smtp_port": 587,
+    "smtp_host": "smtp.gmail.com",
+    "enabled": true
   },
   "account": {
     "_uitleg": "Wordt overschreven door GREPO_ACCOUNT secret. Laat deze waarden leeg.",
