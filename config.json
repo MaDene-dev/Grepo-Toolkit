@@ -3,8 +3,8 @@
   "intervals": {
     "A": {
       "jitter_minutes": 2,
-      "label": "10 min",
       "interval_minutes": 10,
+      "label": "10 min",
       "time_option_booty": 600,
       "time_option_base": 300
     },
@@ -70,13 +70,20 @@
         "actief": true
       },
       {
-        "actief": false,
+        "tot": "02:00",
         "van": "01:00",
-        "tot": "05:00",
-        "interval": "A",
-        "_opmerking": "Nieuw blok"
+        "interval": "C",
+        "_opmerking": "Nieuw blok",
+        "actief": true
       }
     ]
+  },
+  "account": {
+    "_uitleg": "Wordt overschreven door GREPO_ACCOUNT secret. Laat deze waarden leeg.",
+    "world": "",
+    "player_id": 0,
+    "_towns_uitleg": "Hoeft niet ingevuld te worden ? bot detecteert steden automatisch uit de gamepagina.",
+    "towns": []
   },
   "opties": {
     "sessie_refresh_uren": 6,
@@ -90,12 +97,5 @@
     "smtp_port": 587,
     "smtp_host": "smtp.gmail.com",
     "enabled": true
-  },
-  "account": {
-    "_uitleg": "Wordt overschreven door GREPO_ACCOUNT secret. Laat deze waarden leeg.",
-    "player_id": 0,
-    "world": "",
-    "_towns_uitleg": "Hoeft niet ingevuld te worden ? bot detecteert steden automatisch uit de gamepagina.",
-    "towns": []
   }
 }
