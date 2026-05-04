@@ -142,8 +142,10 @@ class GrepolisAPI {
         throw new Error("CAPTCHA gedetecteerd");
       }
 
+      logger.info(`[API] claim_loads_multiple response keys: ${data ? Object.keys(data).join(", ") : "null"}`);
+      if (data && !data.success) logger.info(`[API] Volledige response: ${JSON.stringify(data).substring(0, 300)}`);
+
       if (data?.success) {
-        // claimed_resources bevat totaal over alle steden
         // Kan een object zijn {wood: X, stone: Y, iron: Z} of een enkel getal
         let wood = 0, stone = 0, iron = 0;
         const cr = data.claimed_resources;
