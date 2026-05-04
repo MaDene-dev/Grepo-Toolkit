@@ -1,7 +1,7 @@
 const logger = require("../utils/logger");
 
 function nlTime(d = new Date()) {
-  return d.toLocaleTimeString("nl-BE", { timeZone: "Europe/Brussels", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return d.toLocaleTimeString("nl-BE", { timeZone: "Europe/Brussels", hour: "2-digit", minute: "2-digit" });
 }
 
 class VillageAgent {
