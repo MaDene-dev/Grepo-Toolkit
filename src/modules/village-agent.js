@@ -13,20 +13,26 @@ class VillageAgent {
     this.sessionData = sessionData;
     this.intervals   = config.intervals ?? {};
     this.opties      = config.opties    ?? {};
+    this.eilanden    = config.eilanden  ?? {};
     this.autoStopAt  = null;
+    this.harvestTask = null;
     this.running     = false;
     this.timer       = null;
     this.roundNum    = 0;
     this._recovering = false;
     this._nextReadyAt = null;
-
-    // Cumulatieve stats
     this.totals = { wood: 0, stone: 0, silver: 0, farms: 0, failed: 0 };
   }
 
   start() {
     this.running = true;
-    logger.info("[Village Agent] Gestart.");
+    if (this.harvestTask) {
+      logger.info(`[Village Agent] Harvest modus: ${this.harvestTask.rounds_done}/${this.harvestTask.rounds_total} rondes | interval ${this.harvestTask.interval_key}`);
+      if (this.harvestTask.status === "pending") {
+        this.stats.activateQueueTask(this.harvestTask.queue_id);
+        this.harvestTask.status = "running";
+      }
+    }
     this.run();
   }
 
@@ -37,11 +43,14 @@ class VillageAgent {
 
   // ── Blok bepalen ──────────────────────────────────────────
   _getCurrentBlock() {
+    if (this.harvestTask) {
+      // In harvest modus: gebruik het interval van de taak
+      const iv = this.intervals[this.harvestTask.interval_key];
+      return { key: this.harvestTask.interval_key, interval: iv, van: "harvest", tot: "harvest" };
+    }
     const blokken = this.config.dagschema?.blokken ?? [];
-    const now  = new Date();
-    const beTz = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Brussels" }));
-    const mins = beTz.getHours() * 60 + beTz.getMinutes();
-
+    const beTz = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Brussels" }));
+    const mins  = beTz.getHours() * 60 + beTz.getMinutes();
     for (const b of blokken) {
       if (!b.actief) continue;
       const [vh, vm] = b.van.split(":").map(Number);
@@ -54,14 +63,47 @@ class VillageAgent {
     return null;
   }
 
-  // ── Delay berekening (log-normale jitter) ─────────────────
+  // ── Eiland filtering ──────────────────────────────────────
+  _filterTownsPerEiland(towns) {
+    // Groepeer per eiland
+    const eilandMap = {};
+    for (const town of towns) {
+      const key = `${town.island_x}_${town.island_y}`;
+      if (!eilandMap[key]) eilandMap[key] = [];
+      eilandMap[key].push(town);
+    }
+
+    const gefilterd = [];
+    for (const [key, eilandTowns] of Object.entries(eilandMap)) {
+      const eilandConfig = this.eilanden[key];
+      if (eilandConfig?.primaire_stad_id) {
+        const primair = eilandTowns.find(t => t.id === eilandConfig.primaire_stad_id);
+        if (primair) {
+          gefilterd.push(primair);
+        } else {
+          // Geconfigureerde stad niet gevonden → gebruik eerste als fallback
+          gefilterd.push(eilandTowns[0]);
+          logger.warn(`[Village Agent] Eiland ${key}: primaire stad ${eilandConfig.primaire_stad_id} niet gevonden, gebruik ${eilandTowns[0].name}`);
+        }
+      } else {
+        // Eiland niet geconfigureerd → gebruik eerste stad + log
+        gefilterd.push(eilandTowns[0]);
+        if (eilandTowns.length > 1) {
+          logger.info(`[Village Agent] Eiland ${key}: niet geconfigureerd, gebruik ${eilandTowns[0].name} (${eilandTowns.length} steden op dit eiland)`);
+        }
+      }
+    }
+    return gefilterd;
+  }
+
+  // ── Delay berekening ──────────────────────────────────────
   _calcDelay(blok) {
-    const timeOption = blok.interval.time_option_booty ?? blok.interval.time_option ?? 600;
+    const timeOption = blok.interval?.time_option_booty ?? blok.interval?.time_option ?? 600;
     const minDelay   = timeOption * 1000 + 30_000;
-    const base       = blok.interval.interval_minutes * 60 * 1000;
+    const base       = (blok.interval?.interval_minutes ?? 10) * 60 * 1000;
     const u1 = Math.random(), u2 = Math.random();
     const normal = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-    const jitter = Math.abs(normal) * blok.interval.jitter_minutes * 60 * 1000;
+    const jitter = Math.abs(normal) * (blok.interval?.jitter_minutes ?? 2) * 60 * 1000;
     const kans   = this.opties.extra_pauze_kans ?? 0.10;
     const minMin = this.opties.extra_pauze_min_min ?? 5;
     const maxMin = this.opties.extra_pauze_max_min ?? 10;
@@ -74,12 +116,14 @@ class VillageAgent {
   _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
   _estimateRondesLeft(blok) {
-    const now  = new Date();
-    const beTz = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Brussels" }));
+    if (this.harvestTask) {
+      return Math.max(0, this.harvestTask.rounds_total - this.harvestTask.rounds_done);
+    }
+    const beTz = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Brussels" }));
     const mins = beTz.getHours() * 60 + beTz.getMinutes();
     const [th, tm] = blok.tot === "24:00" ? [24, 0] : blok.tot.split(":").map(Number);
     const minsLeft = th * 60 + tm - mins;
-    return Math.max(0, Math.floor(minsLeft / (blok.interval.interval_minutes ?? 10)));
+    return Math.max(0, Math.floor(minsLeft / (blok.interval?.interval_minutes ?? 10)));
   }
 
   // ── Hoofdloop ─────────────────────────────────────────────
@@ -98,8 +142,20 @@ class VillageAgent {
       }
     }
 
+    // Harvest: check of taak klaar is
+    if (this.harvestTask && this.harvestTask.rounds_done >= this.harvestTask.rounds_total) {
+      logger.info(`[Village Agent] Harvest taak voltooid (${this.harvestTask.rounds_total} rondes)`);
+      await this.stats.completeQueueTask(this.harvestTask.queue_id, {
+        wood_total:   this.totals.wood,
+        stone_total:  this.totals.stone,
+        silver_total: this.totals.silver,
+      });
+      await this._shutdown("harvest-done");
+      return;
+    }
+
     const blok = this._getCurrentBlock();
-    if (!blok) {
+    if (!blok && !this.harvestTask) {
       logger.info("[Village Agent] Buiten actief blok → afsluiten.");
       await this._shutdown("no-block");
       return;
@@ -107,15 +163,21 @@ class VillageAgent {
 
     this.roundNum++;
     const start = Date.now();
+    const modeLabel = this.harvestTask
+      ? `harvest ${this.harvestTask.rounds_done + 1}/${this.harvestTask.rounds_total}`
+      : blok.key;
+    logger.info(`── Ronde #${this.roundNum} | ${nlTime()} | ${modeLabel} ──`);
 
-    logger.info(`── Ronde #${this.roundNum} | ${nlTime()} | ${blok.key} ──`);
-
-    // Update status
     await this.stats.updateStatus({
-      bot_status:        "running",
+      bot_status:         "running",
       current_session_id: this.sessionData.session_id,
-      current_round:     this.roundNum,
-      current_block:     `${blok.van}-${blok.tot}`,
+      current_round:      this.roundNum,
+      current_block:      this.harvestTask ? "harvest" : `${blok.van}-${blok.tot}`,
+      task_mode:          !!this.harvestTask,
+      task_queue_id:      this.harvestTask?.queue_id ?? "",
+      task_rounds_total:  this.harvestTask?.rounds_total ?? 0,
+      task_rounds_done:   this.harvestTask?.rounds_done ?? 0,
+      task_interval:      this.harvestTask?.interval_key ?? "",
     });
 
     let wood = 0, stone = 0, silver = 0, farms = 0;
@@ -123,12 +185,14 @@ class VillageAgent {
 
     try {
       this.api.resetTowns();
-      const towns = await this.api.getTowns();
-      const result = await this._farmAllTowns(towns, blok.key);
-      wood    = result.wood   ?? 0;
-      stone   = result.stone  ?? 0;
-      silver  = result.iron   ?? 0;
-      farms   = result.farms  ?? 0;
+      const allTowns    = await this.api.getTowns();
+      const towns       = this._filterTownsPerEiland(allTowns);
+      const intervalKey = this.harvestTask ? this.harvestTask.interval_key : blok.key;
+      const result      = await this._farmAllTowns(towns, intervalKey);
+      wood          = result.wood   ?? 0;
+      stone         = result.stone  ?? 0;
+      silver        = result.iron   ?? 0;
+      farms         = result.farms  ?? 0;
       townSnapshots = result.townSnapshots ?? [];
     } catch (err) {
       if (err.message === "SESSION_EXPIRED") {
@@ -140,12 +204,12 @@ class VillageAgent {
           return;
         }
         this._recovering = true;
-        logger.warn("[Village Agent] Sessie verlopen — herlogin via Puppeteer...");
+        logger.warn("[Village Agent] Sessie verlopen — herlogin...");
         try {
           await this.api.session.login();
           this.api.resetTowns();
           this._recovering = false;
-          logger.info("[Village Agent] Sessie hersteld! Snelle ronde over 30 seconden.");
+          logger.info("[Village Agent] Sessie hersteld! Snelle ronde over 30s.");
           this.timer = setTimeout(() => this.run(), 30_000);
         } catch (loginErr) {
           logger.error(`[Village Agent] Herverbinden mislukt: ${loginErr.message}`);
@@ -158,13 +222,25 @@ class VillageAgent {
     }
 
     const dur = ((Date.now() - start) / 1000).toFixed(1);
-
-    // Cumulatief bijhouden
     this.totals.wood   += wood;
     this.totals.stone  += stone;
     this.totals.silver += silver;
     this.totals.farms  += farms;
     this.sessionData.rounds++;
+
+    // Harvest taak bijwerken
+    if (this.harvestTask && farms > 0) {
+      this.harvestTask.rounds_done++;
+      this.harvestTask.wood_total   = (this.harvestTask.wood_total   ?? 0) + wood;
+      this.harvestTask.stone_total  = (this.harvestTask.stone_total  ?? 0) + stone;
+      this.harvestTask.silver_total = (this.harvestTask.silver_total ?? 0) + silver;
+      await this.stats.updateQueueTask(this.harvestTask.queue_id, {
+        rounds_done:  this.harvestTask.rounds_done,
+        wood_total:   this.harvestTask.wood_total,
+        stone_total:  this.harvestTask.stone_total,
+        silver_total: this.harvestTask.silver_total,
+      });
+    }
 
     if (farms > 0) {
       logger.info(`[Village Agent] ✓ Ronde #${this.roundNum} | ${farms} dorpen | 🪵${wood} 🪨${stone} 🪙${silver} | ${dur}s`);
@@ -173,24 +249,16 @@ class VillageAgent {
       logger.info(`[Village Agent] Ronde #${this.roundNum} | niets te halen | ${dur}s`);
     }
 
-    // Sla ronde op
     await this.stats.saveRound({
-      session_id:   this.sessionData.session_id,
-      timestamp:    new Date().toISOString(),
-      round_num:    this.roundNum,
-      interval_key: blok.key,
-      farms_total:  farms,
-      wood, stone, silver,
-      duration_sec: dur,
-      world:        this.config.account.world,
+      session_id: this.sessionData.session_id, timestamp: new Date().toISOString(),
+      round_num: this.roundNum, interval_key: this.harvestTask?.interval_key ?? blok?.key,
+      farms_total: farms, wood, stone, silver, duration_sec: dur,
+      world: this.config.account.world,
     });
 
-    // Sla town snapshots op
     if (townSnapshots.length > 0) {
       await this.stats.saveTownSnapshots(townSnapshots.map(s => ({
-        ...s,
-        session_id: this.sessionData.session_id,
-        timestamp:  new Date().toISOString(),
+        ...s, session_id: this.sessionData.session_id, timestamp: new Date().toISOString(),
       })));
     }
 
@@ -201,9 +269,18 @@ class VillageAgent {
   _schedule(blok, farms = 0) {
     if (!this.running) return;
 
-    let delay = this._calcDelay(blok);
+    // Harvest: check of taak klaar is na deze ronde
+    if (this.harvestTask && this.harvestTask.rounds_done >= this.harvestTask.rounds_total) {
+      logger.info(`[Village Agent] Harvest taak voltooid → afsluiten.`);
+      this.stats.completeQueueTask(this.harvestTask.queue_id, {
+        wood_total: this.totals.wood, stone_total: this.totals.stone, silver_total: this.totals.silver,
+      }).then(() => this._shutdown("harvest-done"));
+      return;
+    }
 
-    // Cooldown snap: als dorpen in cooldown zijn en dat binnen X min afloopt
+    let delay = this._calcDelay(blok ?? { interval: this.intervals[this.harvestTask?.interval_key ?? "A"] });
+
+    // Cooldown snap
     const nextReady = this._nextReadyAt && isFinite(this._nextReadyAt) ? this._nextReadyAt : null;
     if (nextReady && farms === 0) {
       const cooldownMs = (nextReady * 1000) - Date.now();
@@ -224,28 +301,30 @@ class VillageAgent {
       return;
     }
 
-    const rondesLeft = this._estimateRondesLeft(blok);
-    logger.info(`[Village Agent] Volgende ophaling: ${nlTime(nextRunAt)} | nog ~${rondesLeft} rondes in dit blok`);
+    const rondesLeft = this._estimateRondesLeft(blok ?? {});
+    logger.info(`[Village Agent] Volgende ophaling: ${nlTime(nextRunAt)} | nog ~${rondesLeft} rondes`);
 
-    // Status updaten met volgende run
-    this.stats.updateStatus({ next_run_at: nextRunAt.toISOString() });
+    this.stats.updateStatus({
+      next_run_at: nextRunAt.toISOString(),
+      task_rounds_done: this.harvestTask?.rounds_done ?? 0,
+    });
 
     this.timer = setTimeout(() => this.run(), delay);
   }
 
-  // ── Netjes afsluiten ──────────────────────────────────────
+  // ── Afsluiten ─────────────────────────────────────────────
   async _shutdown(reason) {
     this.running = false;
     if (this.timer) clearTimeout(this.timer);
 
-    this.sessionData.exit_reason  = reason;
-    this.sessionData.ended_at     = new Date().toISOString();
-    this.sessionData.wood         = this.totals.wood;
-    this.sessionData.stone        = this.totals.stone;
-    this.sessionData.silver       = this.totals.silver;
-    this.sessionData.farms        = this.totals.farms;
+    this.sessionData.exit_reason   = reason;
+    this.sessionData.ended_at      = new Date().toISOString();
+    this.sessionData.wood          = this.totals.wood;
+    this.sessionData.stone         = this.totals.stone;
+    this.sessionData.silver        = this.totals.silver;
+    this.sessionData.farms         = this.totals.farms;
     this.sessionData.failed_rounds = this.totals.failed;
-    this.sessionData.duration_sec = Math.round(
+    this.sessionData.duration_sec  = Math.round(
       (new Date(this.sessionData.ended_at) - new Date(this.sessionData.started_at ?? this.sessionData.triggered_at)) / 1000
     );
 
@@ -262,6 +341,7 @@ class VillageAgent {
       total_wood_today:   this.totals.wood,
       total_stone_today:  this.totals.stone,
       total_silver_today: this.totals.silver,
+      task_mode:          false,
     });
 
     process.exit(0);
@@ -269,7 +349,7 @@ class VillageAgent {
 
   // ── Farm alle steden ──────────────────────────────────────
   async _farmAllTowns(towns, intervalKey) {
-    const townResults  = [];
+    const townResults    = [];
     let earliestCooldown = null;
 
     for (let i = 0; i < towns.length; i++) {
@@ -295,22 +375,20 @@ class VillageAgent {
       return { wood:0, stone:0, iron:0, farms:0, townSnapshots:[] };
     }
 
-    // Opslagcheck + status log per stad (voor het claimen)
+    // Opslagcheck per stad (voor claimen)
     const townsData = await this.api.getTowns();
     const drempel   = this.opties.opslag_drempel_pct ?? 95;
 
     for (const tr of townsWithReady) {
       const td = townsData.find(t => t.id === tr.town.id);
       if (!td?.storage_volume) continue;
-
-      const cap  = td.storage_volume;
-      const pW   = Math.round((td.wood  ?? 0) / cap * 100);
-      const pS   = Math.round((td.stone ?? 0) / cap * 100);
-      const pI   = Math.round((td.iron  ?? 0) / cap * 100);
-      const wW   = pW >= 90 ? "⚠️" : pW >= 80 ? "!" : "";
-      const wS   = pS >= 90 ? "⚠️" : pS >= 80 ? "!" : "";
-      const wI   = pI >= 90 ? "⚠️" : pI >= 80 ? "!" : "";
-
+      const cap = td.storage_volume;
+      const pW  = Math.round((td.wood  ?? 0) / cap * 100);
+      const pS  = Math.round((td.stone ?? 0) / cap * 100);
+      const pI  = Math.round((td.iron  ?? 0) / cap * 100);
+      const wW  = pW >= 90 ? "⚠️" : pW >= 80 ? "!" : "";
+      const wS  = pS >= 90 ? "⚠️" : pS >= 80 ? "!" : "";
+      const wI  = pI >= 90 ? "⚠️" : pI >= 80 ? "!" : "";
       const gain = this.api.estimateGain(tr.town, tr.ready.length, intervalKey);
       const overflows = [
         (td.wood  ?? 0) + gain > cap * drempel / 100,
@@ -331,32 +409,23 @@ class VillageAgent {
 
     await this._sleep(400 + Math.random() * 800);
 
-    // Één claim call voor alle steden tegelijk (zoals de UI — één knop)
-    // Bij multi-town: server bepaalt zelf welke farms klaar zijn per stad
-    const allTowns  = townsToFarm.map(r => r.town);
-    let totalFarms  = 0;
+    // Één claim call (zoals UI)
+    const allTowns = townsToFarm.map(r => r.town);
+    let totalFarms = 0;
     for (const { ready } of townsToFarm) totalFarms += ready.length;
 
-    // Pas 2% skip toe op het totaal aantal dorpen
     if (Math.random() < (this.opties.dorp_overslaan_kans ?? 0.02)) {
-      logger.info("[Village Agent]   Één dorp overgeslagen (menselijk gedrag)");
       totalFarms = Math.max(0, totalFarms - 1);
-    }
-
-    if (totalFarms === 0) {
-      logger.info("[Village Agent]   Alle dorpen overgeslagen (menselijk gedrag)");
-      return { wood:0, stone:0, iron:0, farms:0, townSnapshots:[] };
     }
 
     try {
       const result = await this.api.claimLoads(allTowns, [], intervalKey);
-
       if (!result) {
         logger.warn("[Village Agent]   Claim geen resultaat");
         return { wood:0, stone:0, iron:0, farms:0, townSnapshots:[] };
       }
 
-      // Na-data zit al in de claim response (towns array) — geen extra API call nodig
+      // Voor/na vergelijking uit claim response
       const townsNa = this.api._townsNaData ?? [];
       const townSnapshots = [];
 
@@ -365,38 +434,29 @@ class VillageAgent {
         const tdNa   = townsNa.find(t => t.id === town.id);
         if (!tdVoor || !tdNa || !tdNa.storage_volume) continue;
 
-        const cap  = tdNa.storage_volume;
-        const pVW  = Math.round((tdVoor.wood  ?? 0) / (tdVoor.storage_volume || cap) * 100);
-        const pVS  = Math.round((tdVoor.stone ?? 0) / (tdVoor.storage_volume || cap) * 100);
-        const pVI  = Math.round((tdVoor.iron  ?? 0) / (tdVoor.storage_volume || cap) * 100);
-        const pNW  = Math.round((tdNa.wood    ?? 0) / cap * 100);
-        const pNS  = Math.round((tdNa.stone   ?? 0) / cap * 100);
-        const pNI  = Math.round((tdNa.iron    ?? 0) / cap * 100);
-        const wNW  = pNW >= 90 ? "⚠️" : pNW >= 80 ? "!" : "";
-        const wNS  = pNS >= 90 ? "⚠️" : pNS >= 80 ? "!" : "";
-        const wNI  = pNI >= 90 ? "⚠️" : pNI >= 80 ? "!" : "";
-
+        const cap = tdNa.storage_volume;
+        const pVW = Math.round((tdVoor.wood  ?? 0) / (tdVoor.storage_volume || cap) * 100);
+        const pVS = Math.round((tdVoor.stone ?? 0) / (tdVoor.storage_volume || cap) * 100);
+        const pVI = Math.round((tdVoor.iron  ?? 0) / (tdVoor.storage_volume || cap) * 100);
+        const pNW = Math.round((tdNa.wood    ?? 0) / cap * 100);
+        const pNS = Math.round((tdNa.stone   ?? 0) / cap * 100);
+        const pNI = Math.round((tdNa.iron    ?? 0) / cap * 100);
+        const wNW = pNW >= 90 ? "⚠️" : pNW >= 80 ? "!" : "";
+        const wNS = pNS >= 90 ? "⚠️" : pNS >= 80 ? "!" : "";
+        const wNI = pNI >= 90 ? "⚠️" : pNI >= 80 ? "!" : "";
         logger.info(`[Village Agent]   ${town.name} (${ready.length} dorpen): voor 🪵${pVW}% 🪨${pVS}% 🪙${pVI}% → na 🪵${pNW}%${wNW} 🪨${pNS}%${wNS} 🪙${pNI}%${wNI}`);
 
         townSnapshots.push({
-          town_id:     town.id,
-          town_name:   town.name,
-          wood:        tdNa.wood,
-          stone:       tdNa.stone,
-          silver:      tdNa.iron,
-          storage_max: cap,
-          pct_wood:    pNW,
-          pct_stone:   pNS,
-          pct_silver:  pNI,
+          town_id: town.id, town_name: town.name,
+          wood: tdNa.wood, stone: tdNa.stone, silver: tdNa.iron,
+          storage_max: cap, pct_wood: pNW, pct_stone: pNS, pct_silver: pNI,
         });
       }
 
       return {
-        wood:  result.wood, stone: result.stone, iron: result.iron, farms: totalFarms,
-        storageWood:  result.storageWood,
-        storageStone: result.storageStone,
-        storageIron:  result.storageIron,
-        storageMax:   result.storageMax,
+        wood: result.wood, stone: result.stone, iron: result.iron, farms: totalFarms,
+        storageWood: result.storageWood, storageStone: result.storageStone,
+        storageIron: result.storageIron, storageMax: result.storageMax,
         townSnapshots,
       };
     } catch (err) {
