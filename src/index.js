@@ -185,16 +185,15 @@ async function boot() {
     agent.autoStopAt = autoStopAt;
     agent.start();
   } catch (err) {
-    logger.error(`[Boot] Fout bij starten agent: ${err.message}`);
-    logger.error(`[Boot] Stack: ${err.stack}`);
+    process.stderr.write(`[Boot] Fout bij starten: ${err.message}\n${err.stack}\n`);
     process.exit(1);
   }
 }
 
-process.on("uncaughtException", async (err) => {
+process.on("uncaughtException", (err) => {
+  process.stderr.write(`[Boot] CRASH: ${err.message}\n${err.stack}\n`);
   logger.error(`[Boot] Onverwachte fout: ${err.message}`);
-  logger.error(`[Boot] Stack: ${err.stack}`);
-  setTimeout(() => process.exit(1), 2000);
+  process.exit(1);
 });
 
 boot();
