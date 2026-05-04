@@ -295,26 +295,34 @@ class VillageAgent {
       return { wood:0, stone:0, iron:0, farms:0, townSnapshots:[] };
     }
 
-    // Opslagcheck per stad via loads_data
+    // Opslagcheck + status log per stad (voor het claimen)
     const townsData = await this.api.getTowns();
+    const drempel   = this.opties.opslag_drempel_pct ?? 95;
+
     for (const tr of townsWithReady) {
       const td = townsData.find(t => t.id === tr.town.id);
       if (!td?.storage_volume) continue;
 
       const cap  = td.storage_volume;
+      const pW   = Math.round((td.wood  ?? 0) / cap * 100);
+      const pS   = Math.round((td.stone ?? 0) / cap * 100);
+      const pI   = Math.round((td.iron  ?? 0) / cap * 100);
+      const wW   = pW >= 90 ? "⚠️" : pW >= 80 ? "!" : "";
+      const wS   = pS >= 90 ? "⚠️" : pS >= 80 ? "!" : "";
+      const wI   = pI >= 90 ? "⚠️" : pI >= 80 ? "!" : "";
+
       const gain = this.api.estimateGain(tr.town, tr.ready.length, intervalKey);
       const overflows = [
-        (td.wood  ?? 0) + gain > cap * (this.opties.opslag_drempel_pct ?? 95) / 100,
-        (td.stone ?? 0) + gain > cap * (this.opties.opslag_drempel_pct ?? 95) / 100,
-        (td.iron  ?? 0) + gain > cap * (this.opties.opslag_drempel_pct ?? 95) / 100,
+        (td.wood  ?? 0) + gain > cap * drempel / 100,
+        (td.stone ?? 0) + gain > cap * drempel / 100,
+        (td.iron  ?? 0) + gain > cap * drempel / 100,
       ].filter(Boolean).length;
 
       if (overflows >= 2) {
-        const pW = Math.round((td.wood  ?? 0)/cap*100);
-        const pS = Math.round((td.stone ?? 0)/cap*100);
-        const pI = Math.round((td.iron  ?? 0)/cap*100);
-        logger.info(`[Village Agent]   ${tr.town.name}: overgeslagen — opslag bijna vol (🪵${pW}% 🪨${pS}% 🪙${pI}%)`);
+        logger.info(`[Village Agent]   ${tr.town.name} (${tr.ready.length} dorpen): SKIP — opslag vol 🪵${pW}%${wW} 🪨${pS}%${wS} 🪙${pI}%${wI}`);
         tr.skip = true;
+      } else {
+        logger.info(`[Village Agent]   ${tr.town.name} (${tr.ready.length} dorpen): opslag 🪵${pW}%${wW} 🪨${pS}%${wS} 🪙${pI}%${wI}`);
       }
     }
 
@@ -323,63 +331,42 @@ class VillageAgent {
 
     await this._sleep(400 + Math.random() * 800);
 
-    let totalWood = 0, totalStone = 0, totalIron = 0, totalFarms = 0;
-    let bestStorage  = null;
-    const townSnapshots = [];
-
-    for (let i = 0; i < townsToFarm.length; i++) {
-      const { town, owned, ready } = townsToFarm[i];
+    // Één claim call voor alle steden tegelijk (zoals de UI — één knop)
+    const allFarmIds = [];
+    let totalFarms   = 0;
+    for (const { owned, ready } of townsToFarm) {
       const filtered = owned.filter(() => Math.random() > (this.opties.dorp_overslaan_kans ?? 0.02));
-      if (filtered.length === 0) {
-        logger.info(`[Village Agent]   ${town.name}: overgeslagen (menselijk gedrag)`);
-        continue;
-      }
-      try {
-        const result = await this.api.claimLoads([town], filtered.map(v => v.id), intervalKey);
-        if (result) {
-          const pW = result.storageMax ? Math.round(result.storageWood /result.storageMax*100) : "?";
-          const pS = result.storageMax ? Math.round(result.storageStone/result.storageMax*100) : "?";
-          const pI = result.storageMax ? Math.round(result.storageIron /result.storageMax*100) : "?";
-          const wW = pW >= 90 ? "⚠️" : pW >= 80 ? "!" : "";
-          const wS = pS >= 90 ? "⚠️" : pS >= 80 ? "!" : "";
-          const wI = pI >= 90 ? "⚠️" : pI >= 80 ? "!" : "";
-          logger.info(`[Village Agent]   ${town.name}: +🪵${result.wood} +🪨${result.stone} +🪙${result.iron} (${ready.length} dorpen) | 🪵${pW}%${wW} 🪨${pS}%${wS} 🪙${pI}%${wI}`);
-          totalWood  += result.wood  ?? 0;
-          totalStone += result.stone ?? 0;
-          totalIron  += result.iron  ?? 0;
-          totalFarms += ready.length;
-          if (!bestStorage || (result.storageMax ?? 0) > (bestStorage.storageMax ?? 0)) bestStorage = result;
-
-          townSnapshots.push({
-            town_id:      town.id,
-            town_name:    town.name,
-            wood:         result.storageWood,
-            stone:        result.storageStone,
-            silver:       result.storageIron,
-            storage_max:  result.storageMax,
-            pct_wood:     pW,
-            pct_stone:    pS,
-            pct_silver:   pI,
-          });
-        } else {
-          logger.warn(`[Village Agent]   ${town.name}: claim geen resultaat`);
-        }
-        if (i < townsToFarm.length - 1) await this._sleep(800 + Math.random() * 800);
-      } catch (err) {
-        if (err.message === "SESSION_EXPIRED") throw err;
-        logger.warn(`[Village Agent]   ${town.name} claim fout: ${err.message}`);
-      }
+      allFarmIds.push(...filtered.map(v => v.id));
+      totalFarms += ready.length;
     }
 
-    if (totalFarms === 0) return { wood:0, stone:0, iron:0, farms:0, townSnapshots:[] };
-    return {
-      wood: totalWood, stone: totalStone, iron: totalIron, farms: totalFarms,
-      storageWood:  bestStorage?.storageWood  ?? 0,
-      storageStone: bestStorage?.storageStone ?? 0,
-      storageIron:  bestStorage?.storageIron  ?? 0,
-      storageMax:   bestStorage?.storageMax   ?? 0,
-      townSnapshots,
-    };
+    if (allFarmIds.length === 0) {
+      logger.info("[Village Agent]   Alle dorpen overgeslagen (menselijk gedrag)");
+      return { wood:0, stone:0, iron:0, farms:0, townSnapshots:[] };
+    }
+
+    try {
+      const allTowns = townsToFarm.map(r => r.town);
+      const result   = await this.api.claimLoads(allTowns, allFarmIds, intervalKey);
+
+      if (!result) {
+        logger.warn("[Village Agent]   Claim geen resultaat");
+        return { wood:0, stone:0, iron:0, farms:0, townSnapshots:[] };
+      }
+
+      return {
+        wood:  result.wood,  stone: result.stone, iron: result.iron, farms: totalFarms,
+        storageWood:  result.storageWood,
+        storageStone: result.storageStone,
+        storageIron:  result.storageIron,
+        storageMax:   result.storageMax,
+        townSnapshots: [],
+      };
+    } catch (err) {
+      if (err.message === "SESSION_EXPIRED") throw err;
+      logger.warn(`[Village Agent]   Claim fout: ${err.message}`);
+      return { wood:0, stone:0, iron:0, farms:0, townSnapshots:[] };
+    }
   }
 }
 
