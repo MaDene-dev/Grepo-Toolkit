@@ -96,6 +96,30 @@ class StatsWriter {
     await this._post("saveRound", round);
   }
 
+  // ── Eilanden sync naar config.json ──────────────────────────
+  async syncEilanden(towns, currentEilanden) {
+    // Groepeer steden per eiland
+    const byIsland = {};
+    for (const t of towns) {
+      const key = `${t.island_x}_${t.island_y}`;
+      if (!byIsland[key]) byIsland[key] = [];
+      byIsland[key].push(t);
+    }
+    // Detecteer nieuwe eilanden (niet in huidige config)
+    const nieuw = {};
+    for (const [key, eilandTowns] of Object.entries(byIsland)) {
+      if (!currentEilanden[key]) {
+        nieuw[key] = {
+          naam:             `Eiland ${key}`,
+          primaire_stad_id: eilandTowns[0].id,
+        };
+      }
+    }
+    if (Object.keys(nieuw).length === 0) return; // niets te doen
+    logger.info(`[Stats] Nieuwe eilanden gevonden: ${Object.keys(nieuw).join(", ")} → config bijwerken`);
+    await this._post("syncEilanden", { nieuw });
+  }
+
   // ── Towns opslaan (na elke getTowns()) ──────────────────────
   async saveTowns(towns) {
     if (!towns?.length) return;
