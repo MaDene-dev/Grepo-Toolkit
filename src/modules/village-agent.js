@@ -186,6 +186,7 @@ class VillageAgent {
     try {
       this.api.resetTowns();
       const allTowns    = await this.api.getTowns();
+      await this.stats.saveTowns(allTowns); // Sla steden op in Towns sheet
       const towns       = this._filterTownsPerEiland(allTowns);
       const intervalKey = this.harvestTask ? this.harvestTask.interval_key : blok.key;
       const result      = await this._farmAllTowns(towns, intervalKey);
