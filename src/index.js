@@ -179,7 +179,7 @@ async function boot() {
   }
 
   // ── AGENT STARTEN ──────────────────────────────────────────
-  const api   = new GrepolisAPI(session);
+  const api   = new GrepolisAPI(session, config);
   const agent = new VillageAgent(api, config, mailer, stats, sessionData);
   agent.autoStopAt = autoStopAt;
   agent.start();
