@@ -179,14 +179,21 @@ async function boot() {
   }
 
   // ── AGENT STARTEN ──────────────────────────────────────────
-  const api   = new GrepolisAPI(session, config);
-  const agent = new VillageAgent(api, config, mailer, stats, sessionData);
-  agent.autoStopAt = autoStopAt;
-  agent.start();
+  try {
+    const api   = new GrepolisAPI(session, config);
+    const agent = new VillageAgent(api, config, mailer, stats, sessionData);
+    agent.autoStopAt = autoStopAt;
+    agent.start();
+  } catch (err) {
+    logger.error(`[Boot] Fout bij starten agent: ${err.message}`);
+    logger.error(`[Boot] Stack: ${err.stack}`);
+    process.exit(1);
+  }
 }
 
 process.on("uncaughtException", async (err) => {
   logger.error(`[Boot] Onverwachte fout: ${err.message}`);
+  logger.error(`[Boot] Stack: ${err.stack}`);
   setTimeout(() => process.exit(1), 2000);
 });
 
