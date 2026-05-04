@@ -1,299 +1,277 @@
 const logger = require("../utils/logger");
 
+function nlTime(d = new Date()) {
+  return d.toLocaleTimeString("nl-BE", { timeZone: "Europe/Brussels", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
 class VillageAgent {
-  constructor(api, config, mailer, stats = null) {
-    this.api      = api;
-    this.config   = config;
-    this.mailer       = mailer;
-    this.stats_writer = stats;
-    this.running  = false;
-    this.timer    = null;
-    this.startTime = Date.now();
-    this.roundNum  = 0;
-    this.nextRunAt = null;
-    this.stats     = this._emptyStats();
-    this.history   = [];
+  constructor(api, config, mailer, stats, sessionData) {
+    this.api         = api;
+    this.config      = config;
+    this.mailer      = mailer;
+    this.stats       = stats;
+    this.sessionData = sessionData;
+    this.intervals   = config.intervals ?? {};
+    this.opties      = config.opties    ?? {};
+    this.autoStopAt  = null;
+    this.running     = false;
+    this.timer       = null;
+    this.roundNum    = 0;
     this._recovering = false;
+    this._nextReadyAt = null;
 
-    // Verwerk config naar intern formaat
-    this.intervals = config.intervals;
-    this.blokken   = this._parseBlokken(config.dagschema);
-    this.opties    = config.opties ?? {};
-  }
-
-  _emptyStats() {
-    return {
-      runs: 0, failedRuns: 0,
-      totalWood: 0, totalStone: 0, totalIron: 0,
-      totalFarms: 0, byInterval: {}, lastReport: Date.now(),
-    };
-  }
-
-  // Zet "06:30" om naar minuten sinds middernacht
-  _timeToMins(str) {
-    const [h, m] = str.split(":").map(Number);
-    return h * 60 + m;
-  }
-
-  _parseBlokken(dagschema) {
-    return dagschema.blokken.map(b => ({
-      actief:  b.actief ?? true,
-      vanMins: this._timeToMins(b.van),
-      totMins: this._timeToMins(b.tot === "24:00" ? "23:59" : b.tot),
-      interval: this.intervals[b.interval],
-      naam: `${b.van}–${b.tot} (${this.intervals[b.interval]?.label})`,
-      key: b.interval,
-    }));
-  }
-
-  _nlTotalMins() {
-    // Gebruik Intl voor betrouwbare Belgische tijdzone (automatisch zomer/wintertijd)
-    const now = new Date();
-    const parts = new Intl.DateTimeFormat("nl-BE", {
-      timeZone: "Europe/Brussels",
-      hour: "numeric", minute: "numeric", hour12: false,
-    }).formatToParts(now);
-    const h = parseInt(parts.find(p => p.type === "hour").value);
-    const m = parseInt(parts.find(p => p.type === "minute").value);
-    return h * 60 + m;
-  }
-
-  _nlTimeStr() {
-    const t = this._nlTotalMins();
-    return `${String(Math.floor(t/60)).padStart(2,"0")}:${String(t%60).padStart(2,"0")}`;
-  }
-
-  _isActive() {
-    const blok = this._getCurrentBlok();
-    return blok !== null; // actief als er een actief blok is
-  }
-
-  _getCurrentBlok() {
-    const t = this._nlTotalMins();
-    return this.blokken.find(b => b.actief && t >= b.vanMins && t < b.totMins) ?? null;
-  }
-
-  _estimateRondesLeft(blok) {
-    if (!blok) return 0;
-    const t = this._nlTotalMins();
-    return Math.max(0, Math.floor((blok.totMins - t) / blok.interval.interval_minutes));
-  }
-
-  _calcDelay(blok) {
-    // Gebruik time_option_booty als fallback (meest voorkomende geval)
-    const timeOption = blok.interval.time_option_booty ?? blok.interval.time_option ?? 600;
-    const minDelay = timeOption * 1000 + 30_000;
-    const base     = blok.interval.interval_minutes * 60 * 1000;
-
-    // Log-normaal verdeelde jitter — menselijker dan uniform random
-    // Mensen reageren vaker iets te laat dan veel te vroeg
-    const u1 = Math.random(), u2 = Math.random();
-    const normal = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-    const jitter = Math.abs(normal) * blok.interval.jitter_minutes * 60 * 1000;
-
-    const kans   = this.opties.extra_pauze_kans ?? 0.10;
-    const minMin = this.opties.extra_pauze_min_min ?? 5;
-    const maxMin = this.opties.extra_pauze_max_min ?? 10;
-    const extra  = Math.random() < kans
-      ? (minMin + Math.random() * (maxMin - minMin)) * 60 * 1000 : 0;
-    if (extra > 0) logger.info(`[Village Agent] Extra pauze ingebouwd (~${Math.round(extra/60000)} min)`);
-    return Math.max(minDelay, base + jitter + extra);
+    // Cumulatieve stats
+    this.totals = { wood: 0, stone: 0, silver: 0, farms: 0, failed: 0 };
   }
 
   start() {
     this.running = true;
-    this._logOpstart();
+    logger.info("[Village Agent] Gestart.");
     this.run();
   }
 
   stop() {
     this.running = false;
     if (this.timer) clearTimeout(this.timer);
-    logger.info("[Village Agent] Gestopt.");
   }
 
-  _logOpstart() {
-    const blok   = this._getCurrentBlok();
-    const actief = this._isActive();
-    const schema = this.config.dagschema;
+  // ── Blok bepalen ──────────────────────────────────────────
+  _getCurrentBlock() {
+    const blokken = this.config.dagschema?.blokken ?? [];
+    const now  = new Date();
+    const beTz = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Brussels" }));
+    const mins = beTz.getHours() * 60 + beTz.getMinutes();
 
-    logger.info(`[Village Agent] ═══════════════════════════════`);
-    logger.info(`[Village Agent] Bot gestart | ${this._nlTimeStr()} | ${this.config.account.world.toUpperCase()}`);
-    logger.info(`[Village Agent] Dagschema:`);
-    schema.blokken.forEach(b => {
-      const iv  = this.intervals[b.interval];
-      const aan = b.actief ? "✓" : "✗";
-      logger.info(`[Village Agent]   ${aan} ${b.van}–${b.tot} → ${b.interval} (${iv?.label}, elke ~${iv?.interval_minutes} min)`);
-    });
-
-    if (actief && blok) {
-      logger.info(`[Village Agent] Huidig blok: ${blok.naam} | nog ~${this._estimateRondesLeft(blok)} rondes`);
-    } else {
-      logger.info(`[Village Agent] Buiten actieve uren.`);
-    }
-    logger.info(`[Village Agent] ═══════════════════════════════`);
-  }
-
-  _schedule(blok, farms = 0) {
-    if (!this.running) return;
-    if (!blok || !this._isActive()) {
-      const wait = (15 + Math.random() * 10) * 60 * 1000;
-      this.nextRunAt = new Date(Date.now() + wait);
-      logger.info(`[Village Agent] Buiten actieve uren | volgende check: ${this.nextRunAt.toLocaleTimeString("nl-BE", {timeZone:"Europe/Brussels",hour:"2-digit",minute:"2-digit",second:"2-digit"})}`);
-      this.timer = setTimeout(() => this.run(), wait);
-      return;
-    }
-    let delay = this._calcDelay(blok);
-
-    // Als alle dorpen in cooldown zijn maar de cooldown binnen 4 min voorbij is:
-    // Plan de volgende ronde op dat exacte moment
-    const nextReady = this._nextReadyAt && isFinite(this._nextReadyAt) ? this._nextReadyAt : null;
-    if (nextReady && farms === 0) {
-      const now = Date.now();
-      const cooldownMs = (nextReady * 1000) - now;
-      if (cooldownMs > 0 && cooldownMs < 4 * 60 * 1000) {
-        const cooldownSecs = Math.ceil(cooldownMs / 1000);
-        logger.info(`[Village Agent] Dorpen in cooldown — volgende ophaling over ${cooldownSecs}s (cooldown loopt af)`);
-        delay = Math.max(cooldownMs + 5000, 60_000); // Minimum 1 minuut
+    for (const b of blokken) {
+      if (!b.actief) continue;
+      const [vh, vm] = b.van.split(":").map(Number);
+      const [th, tm] = b.tot === "24:00" ? [24, 0] : b.tot.split(":").map(Number);
+      if (mins >= vh * 60 + vm && mins < th * 60 + tm) {
+        const iv = this.intervals[b.interval];
+        return { ...b, interval: iv, key: b.interval };
       }
     }
-    this._nextReadyAt = null; // Reset voor volgende ronde
-
-    this.nextRunAt = new Date(Date.now() + delay);
-    const rondesLeft = this._estimateRondesLeft(blok);
-
-    // Controleer of de volgende run binnen de GitHub Actions auto-stop valt
-    if (this.autoStopAt && this.nextRunAt >= this.autoStopAt) {
-      logger.info(`[Village Agent] Volgende ophaling (${this.nextRunAt.toLocaleTimeString("nl-BE", {timeZone:"Europe/Brussels",hour:"2-digit",minute:"2-digit"})}) valt na auto-stop — netjes afsluiten.`);
-      this.stop();
-      process.exit(0);
-      return;
-    }
-
-    logger.info(`[Village Agent] Volgende ophaling: ${this.nextRunAt.toLocaleTimeString("nl-BE", {timeZone:"Europe/Brussels",hour:"2-digit",minute:"2-digit",second:"2-digit"})} | nog ~${rondesLeft} rondes in dit blok`);
-    this.timer = setTimeout(() => this.run(), delay);
+    return null;
   }
 
+  // ── Delay berekening (log-normale jitter) ─────────────────
+  _calcDelay(blok) {
+    const timeOption = blok.interval.time_option_booty ?? blok.interval.time_option ?? 600;
+    const minDelay   = timeOption * 1000 + 30_000;
+    const base       = blok.interval.interval_minutes * 60 * 1000;
+    const u1 = Math.random(), u2 = Math.random();
+    const normal = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+    const jitter = Math.abs(normal) * blok.interval.jitter_minutes * 60 * 1000;
+    const kans   = this.opties.extra_pauze_kans ?? 0.10;
+    const minMin = this.opties.extra_pauze_min_min ?? 5;
+    const maxMin = this.opties.extra_pauze_max_min ?? 10;
+    const extra  = Math.random() < kans
+      ? (minMin + Math.random() * (maxMin - minMin)) * 60 * 1000 : 0;
+    if (extra > 0) logger.info(`[Village Agent] Extra pauze (~${Math.round(extra/60000)} min)`);
+    return Math.max(minDelay, base + jitter + extra);
+  }
+
+  _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  _estimateRondesLeft(blok) {
+    const now  = new Date();
+    const beTz = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Brussels" }));
+    const mins = beTz.getHours() * 60 + beTz.getMinutes();
+    const [th, tm] = blok.tot === "24:00" ? [24, 0] : blok.tot.split(":").map(Number);
+    const minsLeft = th * 60 + tm - mins;
+    return Math.max(0, Math.floor(minsLeft / (blok.interval.interval_minutes ?? 10)));
+  }
+
+  // ── Hoofdloop ─────────────────────────────────────────────
   async run() {
     if (!this.running) return;
-    const blok = this._getCurrentBlok();
-    if (!this._isActive() || !blok) { this._schedule(null); return; }
 
-    const roundStart = Date.now();
+    // Pauze check tussen rondes
+    if (this.roundNum > 0) {
+      const paused = await this.stats.isPaused();
+      if (paused) {
+        const status = await this.stats.readStatus();
+        const until  = status?.paused_until === "manual" ? "manuele hervatting" : `tot ${status?.paused_until}`;
+        logger.info(`[Village Agent] Bot gepauzeerd (${until}) → afsluiten.`);
+        await this._shutdown("paused");
+        return;
+      }
+    }
+
+    const blok = this._getCurrentBlock();
+    if (!blok) {
+      logger.info("[Village Agent] Buiten actief blok → afsluiten.");
+      await this._shutdown("no-block");
+      return;
+    }
+
     this.roundNum++;
-    this.stats.runs++;
-    const label = `${blok.key} (${blok.interval.label})`;
+    const start = Date.now();
 
-    logger.info(`[Village Agent] ── Ronde #${this.roundNum} | ${this._nlTimeStr()} | interval ${blok.key}: ${blok.interval.label} ──`);
+    logger.info(`── Ronde #${this.roundNum} | ${nlTime()} | ${blok.key} ──`);
 
-    let wood = 0, stone = 0, iron = 0, farms = 0, lastStorage = null;
+    // Update status
+    await this.stats.updateStatus({
+      bot_status:        "running",
+      current_session_id: this.sessionData.session_id,
+      current_round:     this.roundNum,
+      current_block:     `${blok.van}-${blok.tot}`,
+    });
+
+    let wood = 0, stone = 0, silver = 0, farms = 0;
+    let townSnapshots = [];
 
     try {
-      // Reset towns cache voor verse resource/opslag data
       this.api.resetTowns();
       const towns = await this.api.getTowns();
-      const overview = await this._farmAllTowns(towns, blok.key);
-      wood  = overview.wood  ?? 0;
-      stone = overview.stone ?? 0;
-      iron  = overview.iron  ?? 0;
-      farms = overview.farms ?? 0;
-      if (overview.storageWood !== undefined) lastStorage = overview;
-
-      this.stats.totalWood  += wood;
-      this.stats.totalStone += stone;
-      this.stats.totalIron  += iron;
-      this.stats.totalFarms += farms;
-      this.stats.byInterval[label] = (this.stats.byInterval[label] ?? 0) + 1;
-
-      const dur = ((Date.now() - roundStart) / 1000).toFixed(1);
-
-      this.history.push({
-        time: this._nlTimeStr(), label, wood, stone, silver: iron, farms,
-        storageWood:  lastStorage?.storageWood  ?? 0,
-        storageStone: lastStorage?.storageStone ?? 0,
-        storageIron:  lastStorage?.storageIron  ?? 0,
-        storageMax:   lastStorage?.storageMax   ?? 0,
-        duration: dur, roundNum: this.roundNum,
-      });
-      if (this.history.length > 50) this.history.shift();
-
-      if (farms > 0) {
-        // Bouw opslag-string met percentages per stad
-        let opslagStr = "";
-        const storages = overview.townStorages ?? [];
-        if (storages.length > 0) {
-          opslagStr = " | opslag: " + storages.map(s => {
-            if (!s.max) return "";
-            const pW = Math.round(s.wood /s.max*100);
-            const pS = Math.round(s.stone/s.max*100);
-            const pI = Math.round(s.iron /s.max*100);
-            const w = x => x>=90?"⚠️":x>=80?"!":"";
-            return `${s.name} 🪵${pW}%${w(pW)} 🪨${pS}%${w(pS)} 🪙${pI}%${w(pI)}`;
-          }).filter(Boolean).join(" | ");
-        }
-        logger.info(`[Village Agent] ✓ Ronde #${this.roundNum} | ${farms} dorpen | opgehaald: 🪵${wood} 🪨${stone} 🪙${iron}${opslagStr} | ${dur}s`);
-        logger.info(`[Village Agent] Cumulatief | 🪵${this.stats.totalWood} 🪨${this.stats.totalStone} 🪙${this.stats.totalIron} | ${this.stats.runs} rondes`);
-      } else {
-        logger.info(`[Village Agent] Ronde #${this.roundNum} | niets te halen | ${dur}s`);
-      }
-
-      // Stuur stats naar dashboard na elke ronde (ook als er niets te halen was)
-      if (this.stats_writer) {
-        await this.stats_writer.recordSession(this.stats, this.history);
-      }
-
-      const rapportN = this.opties.rapport_elke_n_rondes ?? 999;
-      if (this.stats.runs % rapportN === 0) {
-        await this._sendReport();
-      }
-
+      const result = await this._farmAllTowns(towns, blok.key);
+      wood    = result.wood   ?? 0;
+      stone   = result.stone  ?? 0;
+      silver  = result.iron   ?? 0;
+      farms   = result.farms  ?? 0;
+      townSnapshots = result.townSnapshots ?? [];
     } catch (err) {
       if (err.message === "SESSION_EXPIRED") {
-        // Ronde was niet uitgevoerd — tel hem niet mee
         this.roundNum--;
-        this.stats.runs--;
-
+        this.totals.failed++;
         if (this._recovering) {
-          logger.error(`[Village Agent] Herstel mislukt — volgende ronde ingepland.`);
-          this._recovering = false;
-          this.stats.failedRuns++;
-        } else {
-          this._recovering = true;
-          logger.warn(`[Village Agent] Sessie verlopen — herlogin via Puppeteer...`);
-          let herstelOk = false;
-          try {
-            await this.api.session.login();
-            this.api.resetTowns(); // Reset town cache na sessie-herstel
-            herstelOk = true;
-            logger.info(`[Village Agent] Sessie hersteld!`);
-          } catch (loginErr) {
-            logger.error(`[Village Agent] Herverbinden mislukt: ${loginErr.message}`);
-            this.stats.failedRuns++;
-          }
-          this._recovering = false;
-
-          if (herstelOk) {
-            logger.info(`[Village Agent] Snelle ronde ingepland over 30 seconden.`);
-            if (this.timer) clearTimeout(this.timer);
-            this.timer = setTimeout(() => this.run(), 30_000);
-            return;
-          }
+          logger.error("[Village Agent] Herstel mislukt → afsluiten.");
+          await this._shutdown("error");
+          return;
         }
-      } else {
-        this.stats.failedRuns++;
-        logger.error(`[Village Agent] Fout ronde #${this.roundNum}: ${err.message}`);
-        await this._handleCaptcha(err.message);
+        this._recovering = true;
+        logger.warn("[Village Agent] Sessie verlopen — herlogin via Puppeteer...");
+        try {
+          await this.api.session.login();
+          this.api.resetTowns();
+          this._recovering = false;
+          logger.info("[Village Agent] Sessie hersteld! Snelle ronde over 30 seconden.");
+          this.timer = setTimeout(() => this.run(), 30_000);
+        } catch (loginErr) {
+          logger.error(`[Village Agent] Herverbinden mislukt: ${loginErr.message}`);
+          await this._shutdown("error");
+        }
+        return;
       }
+      logger.error(`[Village Agent] Fout ronde #${this.roundNum}: ${err.message}`);
+      this.totals.failed++;
+    }
+
+    const dur = ((Date.now() - start) / 1000).toFixed(1);
+
+    // Cumulatief bijhouden
+    this.totals.wood   += wood;
+    this.totals.stone  += stone;
+    this.totals.silver += silver;
+    this.totals.farms  += farms;
+    this.sessionData.rounds++;
+
+    if (farms > 0) {
+      logger.info(`[Village Agent] ✓ Ronde #${this.roundNum} | ${farms} dorpen | 🪵${wood} 🪨${stone} 🪙${silver} | ${dur}s`);
+      logger.info(`[Village Agent] Cumulatief | 🪵${this.totals.wood} 🪨${this.totals.stone} 🪙${this.totals.silver} | ${this.roundNum} rondes`);
+    } else {
+      logger.info(`[Village Agent] Ronde #${this.roundNum} | niets te halen | ${dur}s`);
+    }
+
+    // Sla ronde op
+    await this.stats.saveRound({
+      session_id:   this.sessionData.session_id,
+      timestamp:    new Date().toISOString(),
+      round_num:    this.roundNum,
+      interval_key: blok.key,
+      farms_total:  farms,
+      wood, stone, silver,
+      duration_sec: dur,
+      world:        this.config.account.world,
+    });
+
+    // Sla town snapshots op
+    if (townSnapshots.length > 0) {
+      await this.stats.saveTownSnapshots(townSnapshots.map(s => ({
+        ...s,
+        session_id: this.sessionData.session_id,
+        timestamp:  new Date().toISOString(),
+      })));
     }
 
     this._schedule(blok, farms);
   }
 
+  // ── Scheduling ────────────────────────────────────────────
+  _schedule(blok, farms = 0) {
+    if (!this.running) return;
+
+    let delay = this._calcDelay(blok);
+
+    // Cooldown snap: als dorpen in cooldown zijn en dat binnen X min afloopt
+    const nextReady = this._nextReadyAt && isFinite(this._nextReadyAt) ? this._nextReadyAt : null;
+    if (nextReady && farms === 0) {
+      const cooldownMs = (nextReady * 1000) - Date.now();
+      const snapMin    = this.opties.cooldown_snap_min ?? 4;
+      if (cooldownMs > 0 && cooldownMs < snapMin * 60 * 1000) {
+        const secs = Math.ceil(cooldownMs / 1000);
+        logger.info(`[Village Agent] Cooldown snap: ophaling over ${secs}s`);
+        delay = Math.max(cooldownMs + 5000, 60_000);
+      }
+    }
+    this._nextReadyAt = null;
+
+    const nextRunAt = new Date(Date.now() + delay);
+
+    if (this.autoStopAt && nextRunAt >= this.autoStopAt) {
+      logger.info(`[Village Agent] Volgende ophaling (${nlTime(nextRunAt)}) valt na sessie-stop → afsluiten.`);
+      this._shutdown("auto-stop");
+      return;
+    }
+
+    const rondesLeft = this._estimateRondesLeft(blok);
+    logger.info(`[Village Agent] Volgende ophaling: ${nlTime(nextRunAt)} | nog ~${rondesLeft} rondes in dit blok`);
+
+    // Status updaten met volgende run
+    this.stats.updateStatus({ next_run_at: nextRunAt.toISOString() });
+
+    this.timer = setTimeout(() => this.run(), delay);
+  }
+
+  // ── Netjes afsluiten ──────────────────────────────────────
+  async _shutdown(reason) {
+    this.running = false;
+    if (this.timer) clearTimeout(this.timer);
+
+    this.sessionData.exit_reason  = reason;
+    this.sessionData.ended_at     = new Date().toISOString();
+    this.sessionData.wood         = this.totals.wood;
+    this.sessionData.stone        = this.totals.stone;
+    this.sessionData.silver       = this.totals.silver;
+    this.sessionData.farms        = this.totals.farms;
+    this.sessionData.failed_rounds = this.totals.failed;
+    this.sessionData.duration_sec = Math.round(
+      (new Date(this.sessionData.ended_at) - new Date(this.sessionData.started_at ?? this.sessionData.triggered_at)) / 1000
+    );
+
+    const durMin = Math.round(this.sessionData.duration_sec / 60);
+    logger.info(`[Sessions] Sessie afgerond | ${this.roundNum} rondes | 🪵${this.totals.wood} 🪨${this.totals.stone} 🪙${this.totals.silver} | ${durMin} min`);
+
+    await this.stats.saveSession(this.sessionData);
+    await this.stats.updateStatus({
+      bot_status:         "idle",
+      current_session_id: this.sessionData.session_id,
+      current_round:      this.roundNum,
+      last_session_exit:  reason,
+      last_login_method:  this.sessionData.login_method,
+      total_wood_today:   this.totals.wood,
+      total_stone_today:  this.totals.stone,
+      total_silver_today: this.totals.silver,
+    });
+
+    process.exit(0);
+  }
+
+  // ── Farm alle steden ──────────────────────────────────────
   async _farmAllTowns(towns, intervalKey) {
-    const townResults = [];
+    const townResults  = [];
     let earliestCooldown = null;
 
-    // Stap 1: farm overview per stad
     for (let i = 0; i < towns.length; i++) {
       const town = towns[i];
       try {
@@ -313,53 +291,45 @@ class VillageAgent {
 
     if (townsWithReady.length === 0) {
       if (earliestCooldown && isFinite(earliestCooldown)) this._nextReadyAt = earliestCooldown;
-      logger.info(`[Village Agent]   Geen dorpen klaar`);
-      return { wood:0, stone:0, iron:0, farms:0 };
+      logger.info("[Village Agent]   Geen dorpen klaar");
+      return { wood:0, stone:0, iron:0, farms:0, townSnapshots:[] };
     }
 
-    // Stap 2: veiligheidscheck opslag per stad
+    // Opslagcheck per stad via loads_data
     const townsData = await this.api.getTowns();
     for (const tr of townsWithReady) {
-      const townData = townsData.find(t => t.id === tr.town.id);
-      if (!townData?.storage_volume) continue;
+      const td = townsData.find(t => t.id === tr.town.id);
+      if (!td?.storage_volume) continue;
 
-      const cap   = townData.storage_volume;
-      const wood  = townData.wood  ?? 0;
-      const stone = townData.stone ?? 0;
-      const iron  = townData.iron  ?? 0;
-      const opts  = this.intervals[intervalKey];
-      const gain  = tr.town.booty_researched
-        ? (opts?.time_option_booty ?? 600) / 600 * 255 * tr.ready.length
-        : (opts?.time_option_base  ?? 300) / 300 * 80  * tr.ready.length;
-
+      const cap  = td.storage_volume;
+      const gain = this.api.estimateGain(tr.town, tr.ready.length, intervalKey);
       const overflows = [
-        wood  + gain > cap * 0.95,
-        stone + gain > cap * 0.95,
-        iron  + gain > cap * 0.95,
+        (td.wood  ?? 0) + gain > cap * (this.opties.opslag_drempel_pct ?? 95) / 100,
+        (td.stone ?? 0) + gain > cap * (this.opties.opslag_drempel_pct ?? 95) / 100,
+        (td.iron  ?? 0) + gain > cap * (this.opties.opslag_drempel_pct ?? 95) / 100,
       ].filter(Boolean).length;
 
       if (overflows >= 2) {
-        const pctW = Math.round(wood/cap*100);
-        const pctS = Math.round(stone/cap*100);
-        const pctI = Math.round(iron/cap*100);
-        logger.info(`[Village Agent]   ${tr.town.name}: ophaling overgeslagen — opslag bijna vol (🪵${pctW}% 🪨${pctS}% 🪙${pctI}%)`);
+        const pW = Math.round((td.wood  ?? 0)/cap*100);
+        const pS = Math.round((td.stone ?? 0)/cap*100);
+        const pI = Math.round((td.iron  ?? 0)/cap*100);
+        logger.info(`[Village Agent]   ${tr.town.name}: overgeslagen — opslag bijna vol (🪵${pW}% 🪨${pS}% 🪙${pI}%)`);
         tr.skip = true;
       }
     }
 
     const townsToFarm = townsWithReady.filter(r => !r.skip);
-    if (townsToFarm.length === 0) return { wood:0, stone:0, iron:0, farms:0 };
+    if (townsToFarm.length === 0) return { wood:0, stone:0, iron:0, farms:0, townSnapshots:[] };
 
     await this._sleep(400 + Math.random() * 800);
 
-    // Stap 3: claim per stad, tel totalen correct op
     let totalWood = 0, totalStone = 0, totalIron = 0, totalFarms = 0;
-    let bestStorage = null; // opslag van de grootste stad
-    const townStorages = []; // per-stad opslag voor logging
+    let bestStorage  = null;
+    const townSnapshots = [];
 
     for (let i = 0; i < townsToFarm.length; i++) {
       const { town, owned, ready } = townsToFarm[i];
-      const filtered = owned.filter(() => Math.random() > 0.02);
+      const filtered = owned.filter(() => Math.random() > (this.opties.dorp_overslaan_kans ?? 0.02));
       if (filtered.length === 0) {
         logger.info(`[Village Agent]   ${town.name}: overgeslagen (menselijk gedrag)`);
         continue;
@@ -367,21 +337,29 @@ class VillageAgent {
       try {
         const result = await this.api.claimLoads([town], filtered.map(v => v.id), intervalKey);
         if (result) {
-          logger.info(`[Village Agent]   ${town.name}: +🪵${result.wood} +🪨${result.stone} +🪙${result.iron} (${ready.length} dorpen)`);
+          const pW = result.storageMax ? Math.round(result.storageWood /result.storageMax*100) : "?";
+          const pS = result.storageMax ? Math.round(result.storageStone/result.storageMax*100) : "?";
+          const pI = result.storageMax ? Math.round(result.storageIron /result.storageMax*100) : "?";
+          const wW = pW >= 90 ? "⚠️" : pW >= 80 ? "!" : "";
+          const wS = pS >= 90 ? "⚠️" : pS >= 80 ? "!" : "";
+          const wI = pI >= 90 ? "⚠️" : pI >= 80 ? "!" : "";
+          logger.info(`[Village Agent]   ${town.name}: +🪵${result.wood} +🪨${result.stone} +🪙${result.iron} (${ready.length} dorpen) | 🪵${pW}%${wW} 🪨${pS}%${wS} 🪙${pI}%${wI}`);
           totalWood  += result.wood  ?? 0;
           totalStone += result.stone ?? 0;
           totalIron  += result.iron  ?? 0;
           totalFarms += ready.length;
-          // Bewaar opslag van de stad met de grootste cap
-          if (!bestStorage || (result.storageMax ?? 0) > (bestStorage.storageMax ?? 0)) {
-            bestStorage = result;
-          }
-          townStorages.push({
-            name:  town.name,
-            wood:  result.storageWood,
-            stone: result.storageStone,
-            iron:  result.storageIron,
-            max:   result.storageMax,
+          if (!bestStorage || (result.storageMax ?? 0) > (bestStorage.storageMax ?? 0)) bestStorage = result;
+
+          townSnapshots.push({
+            town_id:      town.id,
+            town_name:    town.name,
+            wood:         result.storageWood,
+            stone:        result.storageStone,
+            silver:       result.storageIron,
+            storage_max:  result.storageMax,
+            pct_wood:     pW,
+            pct_stone:    pS,
+            pct_silver:   pI,
           });
         } else {
           logger.warn(`[Village Agent]   ${town.name}: claim geen resultaat`);
@@ -393,75 +371,16 @@ class VillageAgent {
       }
     }
 
-    if (totalFarms === 0) return { wood:0, stone:0, iron:0, farms:0 };
+    if (totalFarms === 0) return { wood:0, stone:0, iron:0, farms:0, townSnapshots:[] };
     return {
       wood: totalWood, stone: totalStone, iron: totalIron, farms: totalFarms,
       storageWood:  bestStorage?.storageWood  ?? 0,
       storageStone: bestStorage?.storageStone ?? 0,
       storageIron:  bestStorage?.storageIron  ?? 0,
       storageMax:   bestStorage?.storageMax   ?? 0,
-      townStorages, // per-stad opslag voor logging
+      townSnapshots,
     };
   }
-
-  // Veiligheidscheck verplaatst naar inline in _farmAllTowns hierboven
-
-  async _handleCaptcha(message) {
-    if (!message?.toLowerCase().match(/captcha|robot|verificat|beveil/)) return;
-    logger.error("[Village Agent] 🚨 CAPTCHA gedetecteerd!");
-    if (!global._captchaMailSent) {
-      global._captchaMailSent = true;
-      const pauze = this.opties.captcha_pauze_min ?? 45;
-      await this.mailer.send(
-        "🚨 CAPTCHA gedetecteerd — actie vereist!",
-        `Tijdstip: ${new Date().toLocaleString("nl-BE")}\nWereld: ${this.config.account.world.toUpperCase()}\n\nLos de CAPTCHA op in je browser.\nDe bot herstart automatisch na ${pauze} minuten.`
-      );
-    }
-    this.stop();
-    setTimeout(() => { this.start(); }, (this.opties.captcha_pauze_min ?? 45) * 60 * 1000);
-  }
-
-  async _sendReport() {
-    const elapsed = Math.round((Date.now() - this.stats.lastReport) / 60000);
-    const totaal  = this.stats.totalWood + this.stats.totalStone + this.stats.totalIron;
-    const perUur  = elapsed > 0 ? Math.round(totaal / elapsed * 60) : 0;
-    const uptime  = Math.round((Date.now() - this.startTime) / 60000);
-
-    const recentRondes = this.history.slice(-5).reverse().map(r => {
-      const opslag = r.storageMax > 0
-        ? ` | opslag: 🪵${r.storageWood} 🪨${r.storageStone} 🪙${r.storageIron}/${r.storageMax}`
-        : "";
-      return `  #${String(r.roundNum).padStart(3)} | ${r.time} | ${r.label.padEnd(8)} | 🪵${String(r.wood).padStart(4)} 🪨${String(r.stone).padStart(4)} 🪙${String(r.iron).padStart(4)}${opslag}`;
-    }).join("\n");
-
-    const text = [
-      `📊 FARM RAPPORT — ${new Date().toLocaleString("nl-BE")}`,
-      ``,
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-      `📈 SAMENVATTING (${this.stats.runs} rondes, ~${elapsed} min)`,
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-      `  🪵 Hout:    ${this.stats.totalWood.toLocaleString("nl-BE")}`,
-      `  🪨 Steen:   ${this.stats.totalStone.toLocaleString("nl-BE")}`,
-      `  🪙 Zilver:  ${this.stats.totalIron.toLocaleString("nl-BE")}`,
-      `  📦 Totaal:  ${totaal.toLocaleString("nl-BE")}`,
-      `  ⚡ Per uur:  ~${perUur.toLocaleString("nl-BE")}`,
-      `  🏘️  Dorpen:   ${this.stats.totalFarms} beurten`,
-      `  ❌ Fouten:   ${this.stats.failedRuns}`,
-      `  ⏱️  Uptime:   ${uptime} min`,
-      ``,
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-      `🕐 LAATSTE 5 RONDES`,
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-      recentRondes || "  Geen rondes beschikbaar.",
-      ``,
-      `Bot draait normaal ✅`,
-    ].join("\n");
-
-    await this.mailer.send(`📊 Rapport — ${totaal.toLocaleString("nl-BE")} grondstoffen`, text);
-    this.stats = this._emptyStats();
-  }
-
-  _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 }
 
 module.exports = VillageAgent;
