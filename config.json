@@ -33,17 +33,17 @@
   "eilanden": {
     "_uitleg": "Welke stad grondstoffen ophaalt per eiland. Key = island_x_island_y",
     "475_506": {
-      "naam": "Columbus"
+      "naam": "04"
     },
     "469_511": {
-      "naam": "Christoffel"
+      "naam": "03"
     },
     "461_508": {
-      "naam": "Polo's eiland",
+      "naam": "02",
       "primaire_stad_id": 802
     },
     "475_503": {
-      "naam": "Marco's eiland",
+      "naam": "01",
       "primaire_stad_id": 329
     }
   },
