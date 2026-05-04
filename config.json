@@ -5,8 +5,7 @@
     "_uitleg": "Wordt overschreven door GREPO_ACCOUNT secret.",
     "world":     "",
     "player_id": 0,
-    "towns":     [],
-    "_towns_uitleg": "Automatisch gedetecteerd — optionele fallback."
+    "towns":     []
   },
 
   "intervals": {
@@ -26,6 +25,12 @@
       { "actief": true,  "van": "17:30", "tot": "23:00", "interval": "A", "_opmerking": "Avond" },
       { "actief": false, "van": "23:00", "tot": "24:00", "interval": "D", "_opmerking": "Laat" }
     ]
+  },
+
+  "eilanden": {
+    "_uitleg": "Welke stad grondstoffen ophaalt per eiland. Key = island_x_island_y",
+    "475_503": { "naam": "Marco's eiland",      "primaire_stad_id": 329 },
+    "461_508": { "naam": "Polo's eiland",        "primaire_stad_id": 802 }
   },
 
   "opties": {
