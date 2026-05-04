@@ -332,35 +332,73 @@ class VillageAgent {
     await this._sleep(400 + Math.random() * 800);
 
     // Één claim call voor alle steden tegelijk (zoals de UI — één knop)
-    const allFarmIds = [];
-    let totalFarms   = 0;
-    for (const { owned, ready } of townsToFarm) {
-      const filtered = owned.filter(() => Math.random() > (this.opties.dorp_overslaan_kans ?? 0.02));
-      allFarmIds.push(...filtered.map(v => v.id));
-      totalFarms += ready.length;
+    // Bij multi-town: server bepaalt zelf welke farms klaar zijn per stad
+    const allTowns  = townsToFarm.map(r => r.town);
+    let totalFarms  = 0;
+    for (const { ready } of townsToFarm) totalFarms += ready.length;
+
+    // Pas 2% skip toe op het totaal aantal dorpen
+    if (Math.random() < (this.opties.dorp_overslaan_kans ?? 0.02)) {
+      logger.info("[Village Agent]   Één dorp overgeslagen (menselijk gedrag)");
+      totalFarms = Math.max(0, totalFarms - 1);
     }
 
-    if (allFarmIds.length === 0) {
+    if (totalFarms === 0) {
       logger.info("[Village Agent]   Alle dorpen overgeslagen (menselijk gedrag)");
       return { wood:0, stone:0, iron:0, farms:0, townSnapshots:[] };
     }
 
     try {
-      const allTowns = townsToFarm.map(r => r.town);
-      const result   = await this.api.claimLoads(allTowns, allFarmIds, intervalKey);
+      const result = await this.api.claimLoads(allTowns, [], intervalKey);
 
       if (!result) {
         logger.warn("[Village Agent]   Claim geen resultaat");
         return { wood:0, stone:0, iron:0, farms:0, townSnapshots:[] };
       }
 
+      // Haal verse town data op voor nauwkeurige "na ophalen" opslag
+      this.api.resetTowns();
+      const townsNa = await this.api.getTowns();
+      const townSnapshots = [];
+
+      for (const { town, ready } of townsToFarm) {
+        const tdVoor = townsData.find(t => t.id === town.id);
+        const tdNa   = townsNa.find(t => t.id === town.id);
+        if (!tdVoor || !tdNa || !tdNa.storage_volume) continue;
+
+        const cap  = tdNa.storage_volume;
+        const pVW  = Math.round((tdVoor.wood  ?? 0) / (tdVoor.storage_volume || cap) * 100);
+        const pVS  = Math.round((tdVoor.stone ?? 0) / (tdVoor.storage_volume || cap) * 100);
+        const pVI  = Math.round((tdVoor.iron  ?? 0) / (tdVoor.storage_volume || cap) * 100);
+        const pNW  = Math.round((tdNa.wood    ?? 0) / cap * 100);
+        const pNS  = Math.round((tdNa.stone   ?? 0) / cap * 100);
+        const pNI  = Math.round((tdNa.iron    ?? 0) / cap * 100);
+        const wNW  = pNW >= 90 ? "⚠️" : pNW >= 80 ? "!" : "";
+        const wNS  = pNS >= 90 ? "⚠️" : pNS >= 80 ? "!" : "";
+        const wNI  = pNI >= 90 ? "⚠️" : pNI >= 80 ? "!" : "";
+
+        logger.info(`[Village Agent]   ${town.name} (${ready.length} dorpen): voor 🪵${pVW}% 🪨${pVS}% 🪙${pVI}% → na 🪵${pNW}%${wNW} 🪨${pNS}%${wNS} 🪙${pNI}%${wNI}`);
+
+        townSnapshots.push({
+          town_id:     town.id,
+          town_name:   town.name,
+          wood:        tdNa.wood,
+          stone:       tdNa.stone,
+          silver:      tdNa.iron,
+          storage_max: cap,
+          pct_wood:    pNW,
+          pct_stone:   pNS,
+          pct_silver:  pNI,
+        });
+      }
+
       return {
-        wood:  result.wood,  stone: result.stone, iron: result.iron, farms: totalFarms,
+        wood:  result.wood, stone: result.stone, iron: result.iron, farms: totalFarms,
         storageWood:  result.storageWood,
         storageStone: result.storageStone,
         storageIron:  result.storageIron,
         storageMax:   result.storageMax,
-        townSnapshots: [],
+        townSnapshots,
       };
     } catch (err) {
       if (err.message === "SESSION_EXPIRED") throw err;
