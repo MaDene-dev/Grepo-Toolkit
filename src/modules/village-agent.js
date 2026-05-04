@@ -88,8 +88,11 @@ class VillageAgent {
       } else {
         // Eiland niet geconfigureerd → gebruik eerste stad als default
         gefilterd.push(eilandTowns[0]);
-        const namen = eilandTowns.map(t => t.name).join(", ");
-        logger.info(`[Village Agent] Eiland ${key}: niet geconfigureerd → default: ${eilandTowns[0].name} | steden: ${namen}`);
+        // Waarschuw enkel als er meerdere steden zijn (dan is een keuze relevant)
+        if (eilandTowns.length > 1) {
+          const namen = eilandTowns.map(t => t.name).join(", ");
+          logger.info(`[Village Agent] Eiland ${key}: meerdere steden, geen config → default: ${eilandTowns[0].name} | keuze: ${namen}`);
+        }
       }
     }
     return gefilterd;
@@ -185,7 +188,9 @@ class VillageAgent {
     try {
       this.api.resetTowns();
       const allTowns    = await this.api.getTowns();
-      await this.stats.saveTowns(allTowns); // Sla steden op in Towns sheet
+      await this.stats.saveTowns(allTowns);
+      // Sync nieuwe eilanden naar config.json
+      await this.stats.syncEilanden(allTowns, this.eilanden);
       const towns       = this._filterTownsPerEiland(allTowns);
       const intervalKey = this.harvestTask ? this.harvestTask.interval_key : blok.key;
       const result      = await this._farmAllTowns(towns, intervalKey);
