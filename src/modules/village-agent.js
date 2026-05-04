@@ -86,11 +86,10 @@ class VillageAgent {
           logger.warn(`[Village Agent] Eiland ${key}: primaire stad ${eilandConfig.primaire_stad_id} niet gevonden, gebruik ${eilandTowns[0].name}`);
         }
       } else {
-        // Eiland niet geconfigureerd → gebruik eerste stad + log
+        // Eiland niet geconfigureerd → gebruik eerste stad als default
         gefilterd.push(eilandTowns[0]);
-        if (eilandTowns.length > 1) {
-          logger.info(`[Village Agent] Eiland ${key}: niet geconfigureerd, gebruik ${eilandTowns[0].name} (${eilandTowns.length} steden op dit eiland)`);
-        }
+        const namen = eilandTowns.map(t => t.name).join(", ");
+        logger.info(`[Village Agent] Eiland ${key}: niet geconfigureerd → default: ${eilandTowns[0].name} | steden: ${namen}`);
       }
     }
     return gefilterd;
@@ -230,8 +229,8 @@ class VillageAgent {
     this.totals.farms  += farms;
     this.sessionData.rounds++;
 
-    // Harvest taak bijwerken
-    if (this.harvestTask && farms > 0) {
+    // Harvest taak bijwerken — elke ronde telt, ook als er niets te halen was
+    if (this.harvestTask) {
       this.harvestTask.rounds_done++;
       this.harvestTask.wood_total   = (this.harvestTask.wood_total   ?? 0) + wood;
       this.harvestTask.stone_total  = (this.harvestTask.stone_total  ?? 0) + stone;
@@ -446,7 +445,8 @@ class VillageAgent {
         const wNW = pNW >= 90 ? "⚠️" : pNW >= 80 ? "!" : "";
         const wNS = pNS >= 90 ? "⚠️" : pNS >= 80 ? "!" : "";
         const wNI = pNI >= 90 ? "⚠️" : pNI >= 80 ? "!" : "";
-        logger.info(`[Village Agent]   ${town.name} (${ready.length} dorpen): na 🪵${pNW}%${wNW} 🪨${pNS}%${wNS} 🪙${pNI}%${wNI} (${nl(tdNa.wood)} / ${nl(tdNa.stone)} / ${nl(tdNa.iron)} | cap: ${nl(cap)})`);
+        const fmt = n => Math.round(n).toLocaleString("nl-BE");
+        logger.info(`[Village Agent]   ${town.name} (${ready.length} dorpen): na 🪵${pNW}%${wNW} 🪨${pNS}%${wNS} 🪙${pNI}%${wNI} (${fmt(tdNa.wood)} / ${fmt(tdNa.stone)} / ${fmt(tdNa.iron)} | cap: ${fmt(cap)})`);
 
         townSnapshots.push({
           town_id: town.id, town_name: town.name,
