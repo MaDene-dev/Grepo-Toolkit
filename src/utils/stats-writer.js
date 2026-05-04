@@ -1,85 +1,93 @@
-const logger = require("../utils/logger");
+const logger = require("./logger");
 
 class StatsWriter {
   constructor(config) {
-    this.world         = config.account.world ?? "unknown";
-    this._sessionStart = new Date().toISOString();
-    this.gasUrl        = process.env.GAS_URL;
-    this.gasSecret     = process.env.GAS_SECRET;
+    this.world     = config.account.world ?? "unknown";
+    this.gasUrl    = process.env.GAS_URL;
+    this.gasSecret = process.env.GAS_SECRET;
+    this.sessionId = null;
   }
 
-  async recordSession(stats, history) {
-    if (!this.gasUrl || !this.gasSecret) {
-      logger.warn("[Stats] GAS_URL of GAS_SECRET niet ingesteld — dashboard wordt niet bijgewerkt");
-      return;
-    }
-    logger.info("[Stats] Versturen naar dashboard...");
-
-    const lastRound  = history.length > 0 ? history[history.length - 1] : null;
-    const durations  = history.map(r => parseFloat(r.duration)).filter(d => !isNaN(d));
-    const avgDuration = durations.length > 0
-      ? (durations.reduce((a, b) => a + b, 0) / durations.length).toFixed(1)
-      : 0;
-
-    const payload = {
-      world:         this.world,
-      runs:          stats.runs,
-      wood:          stats.totalWood,
-      stone:         stats.totalStone,
-      silver:        stats.totalIron,
-      farms:         stats.totalFarms,
-      failed:        stats.failedRuns,
-      avg_duration:  avgDuration,
-      started:       this._sessionStart,
-      ended:         new Date().toISOString(),
-      storage_wood:  lastRound?.storageWood  ?? 0,
-      storage_stone: lastRound?.storageStone ?? 0,
-      storage_iron:  lastRound?.storageIron  ?? 0,
-      storage_max:   lastRound?.storageMax   ?? 0,
-      rounds: history.slice(-20).map(r => ({
-        time:         r.time,
-        label:        r.label,
-        farms:        r.farms,
-        wood:         r.wood,
-        stone:        r.stone,
-        silver:       r.silver ?? r.iron ?? 0,
-        storageWood:  r.storageWood  ?? 0,
-        storageStone: r.storageStone ?? 0,
-        storageIron:  r.storageIron  ?? 0,
-        storageMax:   r.storageMax   ?? 0,
-      })),
-    };
-
+  // ── GAS API call ──────────────────────────────────────────
+  async _post(action, payload) {
+    if (!this.gasUrl || !this.gasSecret) return null;
     try {
-      // Gebruik global fetch (Node 18+) — handelt GAS redirects correct af
-      const body = JSON.stringify(payload);
-      // Stuur secret zowel als header als URL parameter
-      // Headers worden soms weggegooid bij GAS redirects
       const url  = new URL(this.gasUrl);
       url.searchParams.set("secret", this.gasSecret);
+      url.searchParams.set("action", action);
       const res  = await fetch(url.toString(), {
-        method:  "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Bot-Secret": this.gasSecret,
-        },
-        body,
+        method:   "POST",
+        headers:  { "Content-Type": "application/json" },
+        body:     JSON.stringify(payload),
         redirect: "follow",
       });
-
       const text = await res.text();
-      logger.info(`[Stats] HTTP ${res.status} | ${text.substring(0, 150)}`);
-      try {
-        const r = JSON.parse(text);
-        if (r.ok) logger.info("[Stats] Dashboard bijgewerkt ✓");
-        else      logger.warn(`[Stats] GAS fout: ${r.error}`);
-      } catch (_) {
-        if (res.ok) logger.info("[Stats] Dashboard bijgewerkt ✓");
-        else        logger.warn(`[Stats] Onverwachte response: ${res.status}`);
-      }
+      try { return JSON.parse(text); } catch (_) { return null; }
     } catch (err) {
-      logger.warn(`[Stats] Fout: ${err.message}`);
+      logger.warn(`[Stats] POST fout (${action}): ${err.message}`);
+      return null;
     }
+  }
+
+  async _get(action, params = {}) {
+    if (!this.gasUrl || !this.gasSecret) return null;
+    try {
+      const url = new URL(this.gasUrl);
+      url.searchParams.set("secret", this.gasSecret);
+      url.searchParams.set("action", action);
+      for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+      const res  = await fetch(url.toString(), { redirect: "follow" });
+      const text = await res.text();
+      try { return JSON.parse(text); } catch (_) { return null; }
+    } catch (err) {
+      logger.warn(`[Stats] GET fout (${action}): ${err.message}`);
+      return null;
+    }
+  }
+
+  // ── Status lezen (pre-check) ──────────────────────────────
+  async readStatus() {
+    const r = await this._get("getStatus");
+    if (!r) return null;
+    return r;
+  }
+
+  // ── Laatste ophaling ophalen ──────────────────────────────
+  async getLastHarvest() {
+    const r = await this._get("getLastHarvest", { world: this.world });
+    if (!r?.timestamp) return null;
+    return new Date(r.timestamp);
+  }
+
+  // ── Status updaten ────────────────────────────────────────
+  async updateStatus(fields) {
+    await this._post("updateStatus", { world: this.world, ...fields });
+  }
+
+  // ── Pauze check ───────────────────────────────────────────
+  async isPaused() {
+    const status = await this.readStatus();
+    if (!status) return false; // fail-open
+    if (status.bot_status !== "paused") return false;
+    if (!status.paused_until || status.paused_until === "manual") return true;
+    return new Date(status.paused_until) > new Date();
+  }
+
+  // ── Sessie opslaan ────────────────────────────────────────
+  async saveSession(session) {
+    const r = await this._post("saveSession", session);
+    if (r?.ok) logger.info(`[Stats] Sessie opgeslagen ✓`);
+    else        logger.warn(`[Stats] Sessie opslaan mislukt`);
+  }
+
+  // ── Ronde opslaan ─────────────────────────────────────────
+  async saveRound(round) {
+    await this._post("saveRound", round);
+  }
+
+  // ── TownSnapshot opslaan ──────────────────────────────────
+  async saveTownSnapshots(snapshots) {
+    await this._post("saveTownSnapshots", { snapshots });
   }
 }
 
