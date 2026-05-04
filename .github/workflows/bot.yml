@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "*/50 * * * *"
   workflow_dispatch:
+    inputs:
+      trigger_source:
+        description: "Trigger source (cron/manual/gas)"
+        required: false
+        default: "manual"
 
 concurrency:
   group: grepo-toolkit
@@ -43,6 +48,7 @@ jobs:
       - name: Run Village Agent
         env:
           GREPO_EMAIL:          ${{ secrets.GREPO_EMAIL }}
+          TRIGGER_SOURCE:       ${{ github.event.inputs.trigger_source || 'cron' }}
           GREPO_PASSWORD:       ${{ secrets.GREPO_PASSWORD }}
           GAS_URL:              ${{ secrets.GAS_URL }}
           GAS_SECRET:           ${{ secrets.GAS_SECRET }}
