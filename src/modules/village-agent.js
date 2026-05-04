@@ -143,14 +143,13 @@ class VillageAgent {
 
     // Harvest: check of taak klaar is
     if (this.harvestTask && this.harvestTask.rounds_done >= this.harvestTask.rounds_total) {
-      logger.info(`[Village Agent] Harvest taak voltooid (${this.harvestTask.rounds_total} rondes)`);
+      logger.info(`[Village Agent] Harvest taak voltooid (${this.harvestTask.rounds_total} rondes) → terug naar dagschema`);
       await this.stats.completeQueueTask(this.harvestTask.queue_id, {
         wood_total:   this.totals.wood,
         stone_total:  this.totals.stone,
         silver_total: this.totals.silver,
       });
-      await this._shutdown("harvest-done");
-      return;
+      this.harvestTask = null; // Wis harvest modus → terug naar dagschema
     }
 
     const blok = this._getCurrentBlock();
@@ -160,6 +159,7 @@ class VillageAgent {
       return;
     }
 
+    this._hadStorageSkip = false;
     this.roundNum++;
     const start = Date.now();
     const modeLabel = this.harvestTask
@@ -229,8 +229,8 @@ class VillageAgent {
     this.totals.farms  += farms;
     this.sessionData.rounds++;
 
-    // Harvest taak bijwerken — elke ronde telt, ook als er niets te halen was
-    if (this.harvestTask) {
+    // Harvest taak bijwerken — telt als er geclaimed werd OF opslag een stad blokkeerde
+    if (this.harvestTask && (farms > 0 || this._hadStorageSkip)) {
       this.harvestTask.rounds_done++;
       this.harvestTask.wood_total   = (this.harvestTask.wood_total   ?? 0) + wood;
       this.harvestTask.stone_total  = (this.harvestTask.stone_total  ?? 0) + stone;
@@ -270,13 +270,9 @@ class VillageAgent {
   _schedule(blok, farms = 0) {
     if (!this.running) return;
 
-    // Harvest: check of taak klaar is na deze ronde
+    // Harvest: check of taak klaar is na deze ronde (al afgehandeld in run(), hier enkel check)
     if (this.harvestTask && this.harvestTask.rounds_done >= this.harvestTask.rounds_total) {
-      logger.info(`[Village Agent] Harvest taak voltooid → afsluiten.`);
-      this.stats.completeQueueTask(this.harvestTask.queue_id, {
-        wood_total: this.totals.wood, stone_total: this.totals.stone, silver_total: this.totals.silver,
-      }).then(() => this._shutdown("harvest-done"));
-      return;
+      this.harvestTask = null; // fallback
     }
 
     let delay = this._calcDelay(blok ?? { interval: this.intervals[this.harvestTask?.interval_key ?? "A"] });
@@ -401,6 +397,7 @@ class VillageAgent {
       if (overflows >= 2) {
         logger.info(`[Village Agent]   ${tr.town.name} (${tr.ready.length} dorpen): SKIP — opslag 🪵${pW}%${wW} 🪨${pS}%${wS} 🪙${pI}%${wI} (te vol)`);
         tr.skip = true;
+        this._hadStorageSkip = true;
       }
       // Geen "voor" log — enkel "na" log na het claimen
     }
