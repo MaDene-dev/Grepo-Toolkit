@@ -196,7 +196,8 @@ class VillageAgent {
       farms         = result.farms  ?? 0;
       townSnapshots = result.townSnapshots ?? [];
     } catch (err) {
-      if (err.message === "SESSION_EXPIRED") {
+      const needsRelogin = err.message === "SESSION_EXPIRED" || err.message === "Geen steden gevonden.";
+      if (needsRelogin) {
         this.roundNum--;
         this.totals.failed++;
         if (this._recovering) {
@@ -205,7 +206,7 @@ class VillageAgent {
           return;
         }
         this._recovering = true;
-        logger.warn("[Village Agent] Sessie verlopen — herlogin...");
+        logger.warn(`[Village Agent] Sessie verlopen (${err.message}) — herlogin...`);
         try {
           await this.api.session.login();
           this.api.resetTowns();
@@ -303,7 +304,8 @@ class VillageAgent {
     }
 
     const rondesLeft = this._estimateRondesLeft(blok ?? {});
-    logger.info(`[Village Agent] Volgende ophaling: ${nlTime(nextRunAt)} | nog ~${rondesLeft} rondes`);
+    const nlTimeSec = d => d.toLocaleTimeString('nl-BE', {timeZone:'Europe/Brussels',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  logger.info(`[Village Agent] Volgende ophaling: ${nlTimeSec(nextRunAt)} | nog ~${rondesLeft} rondes`);
 
     this.stats.updateStatus({
       next_run_at: nextRunAt.toISOString(),
@@ -398,11 +400,10 @@ class VillageAgent {
       ].filter(Boolean).length;
 
       if (overflows >= 2) {
-        logger.info(`[Village Agent]   ${tr.town.name} (${tr.ready.length} dorpen): SKIP — opslag vol 🪵${pW}%${wW} 🪨${pS}%${wS} 🪙${pI}%${wI}`);
+        logger.info(`[Village Agent]   ${tr.town.name} (${tr.ready.length} dorpen): SKIP — opslag 🪵${pW}%${wW} 🪨${pS}%${wS} 🪙${pI}%${wI} (te vol)`);
         tr.skip = true;
-      } else {
-        logger.info(`[Village Agent]   ${tr.town.name} (${tr.ready.length} dorpen): opslag 🪵${pW}%${wW} 🪨${pS}%${wS} 🪙${pI}%${wI}`);
       }
+      // Geen "voor" log — enkel "na" log na het claimen
     }
 
     const townsToFarm = townsWithReady.filter(r => !r.skip);
@@ -445,7 +446,7 @@ class VillageAgent {
         const wNW = pNW >= 90 ? "⚠️" : pNW >= 80 ? "!" : "";
         const wNS = pNS >= 90 ? "⚠️" : pNS >= 80 ? "!" : "";
         const wNI = pNI >= 90 ? "⚠️" : pNI >= 80 ? "!" : "";
-        logger.info(`[Village Agent]   ${town.name} (${ready.length} dorpen): voor 🪵${pVW}% 🪨${pVS}% 🪙${pVI}% → na 🪵${pNW}%${wNW} 🪨${pNS}%${wNS} 🪙${pNI}%${wNI}`);
+        logger.info(`[Village Agent]   ${town.name} (${ready.length} dorpen): na 🪵${pNW}%${wNW} 🪨${pNS}%${wNS} 🪙${pNI}%${wNI} (${nl(tdNa.wood)} / ${nl(tdNa.stone)} / ${nl(tdNa.iron)} | cap: ${nl(cap)})`);
 
         townSnapshots.push({
           town_id: town.id, town_name: town.name,
