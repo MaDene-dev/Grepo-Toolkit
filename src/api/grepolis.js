@@ -36,6 +36,7 @@ class GrepolisAPI {
         iron:             t.iron ?? 0,
         storage_volume:   t.storage_volume ?? 0,
       }));
+      this._lastTownsData = this._towns; // bewaar voor voor/na vergelijking
       logger.info(`[API] ${this._towns.length} steden: ${this._towns.map(t => `${t.name}(${t.booty_researched ? "booty" : "basis"})`).join(", ")}`);
       return this._towns;
     }
@@ -143,35 +144,43 @@ class GrepolisAPI {
       }
 
       logger.info(`[API] claim_loads_multiple response keys: ${data ? Object.keys(data).join(", ") : "null"}`);
-      if (data && !data.success) logger.info(`[API] Volledige response: ${JSON.stringify(data).substring(0, 300)}`);
 
-      if (data?.success) {
-        // Kan een object zijn {wood: X, stone: Y, iron: Z} of een enkel getal
-        let wood = 0, stone = 0, iron = 0;
-        const cr = data.claimed_resources;
-        const crType = data.claimed_resources_per_resource_type;
+      // Response bevat bijgewerkte towns array — geen success veld
+      if (data?.towns && (Array.isArray(data.towns) ? data.towns.length > 0 : Object.keys(data.towns).length > 0)) {
+        const townList = Array.isArray(data.towns) ? data.towns : Object.values(data.towns);
 
-        if (cr && typeof cr === "object") {
-          wood  = cr.wood  ?? cr[1] ?? 0;
-          stone = cr.stone ?? cr[2] ?? 0;
-          iron  = cr.iron  ?? cr[3] ?? 0;
-        } else if (crType !== undefined) {
-          wood = stone = iron = crType;
+        // Bereken totaal opgehaald per resource (verschil voor/na per stad)
+        let totalWood = 0, totalStone = 0, totalIron = 0;
+        let storageWood = 0, storageStone = 0, storageIron = 0, storageMax = 0;
+
+        for (const townNa of townList) {
+          // Vind de "voor" data uit de towns cache
+          const tdVoor = this._lastTownsData?.find(t => t.id === townNa.id);
+          if (tdVoor) {
+            totalWood  += Math.max(0, (townNa.wood  ?? 0) - (tdVoor.wood  ?? 0));
+            totalStone += Math.max(0, (townNa.stone ?? 0) - (tdVoor.stone ?? 0));
+            totalIron  += Math.max(0, (townNa.iron  ?? 0) - (tdVoor.iron  ?? 0));
+          }
+          // Gebruik grootste stad voor opslag-referentie
+          if ((townNa.storage_volume ?? 0) > storageMax) {
+            storageMax   = townNa.storage_volume ?? 0;
+            storageWood  = townNa.wood  ?? 0;
+            storageStone = townNa.stone ?? 0;
+            storageIron  = townNa.iron  ?? 0;
+          }
         }
 
-        // Log de ruwe response voor diagnose
-        logger.info(`[API] Claim response: claimed=${JSON.stringify(cr ?? crType).substring(0,100)}`);
+        // Sla bijgewerkte town data op voor voor/na vergelijking in village-agent
+        this._townsNaData = townList.map(t => ({
+          id: t.id, name: t.name,
+          wood: t.wood ?? 0, stone: t.stone ?? 0, iron: t.iron ?? 0,
+          storage_volume: t.storage_volume ?? 0,
+        }));
 
-        const storage = data.resources ?? {};
-        return {
-          wood, stone, iron,
-          storageWood:  storage.wood  ?? 0,
-          storageStone: storage.stone ?? 0,
-          storageIron:  storage.iron  ?? 0,
-          storageMax:   data.storage  ?? 0,
-        };
+        return { wood: totalWood, stone: totalStone, iron: totalIron, storageWood, storageStone, storageIron, storageMax };
       }
-      if (data?.error) logger.warn(`[API] claim_loads_multiple fout: ${data.error}`);
+
+      if (data?.error) logger.warn(`[API] claim_loads_multiple fout: ${JSON.stringify(data.error)}`);
       return null;
     }
 
