@@ -1,386 +1,165 @@
 const logger = require("../utils/logger");
 
-function nlTime(d = new Date()) {
-  return d.toLocaleTimeString("nl-BE", { timeZone: "Europe/Brussels", hour: "2-digit", minute: "2-digit", second: "2-digit" });
-}
-
-class VillageAgent {
-  constructor(api, config, mailer, stats, sessionData) {
-    this.api         = api;
-    this.config      = config;
-    this.mailer      = mailer;
-    this.stats       = stats;
-    this.sessionData = sessionData;
-    this.intervals   = config.intervals ?? {};
-    this.opties      = config.opties    ?? {};
-    this.autoStopAt  = null;
-    this.running     = false;
-    this.timer       = null;
-    this.roundNum    = 0;
-    this._recovering = false;
-    this._nextReadyAt = null;
-
-    // Cumulatieve stats
-    this.totals = { wood: 0, stone: 0, silver: 0, farms: 0, failed: 0 };
+class GrepolisAPI {
+  constructor(session, config) {
+    this.session    = session;
+    this.config     = config || session.config || {};
+    this._towns     = null;
+    this._loadsData = null;
   }
 
-  start() {
-    this.running = true;
-    logger.info("[Village Agent] Gestart.");
-    this.run();
-  }
+  async getTowns() {
+    if (this._towns?.length > 0) return this._towns;
 
-  stop() {
-    this.running = false;
-    if (this.timer) clearTimeout(this.timer);
-  }
+    const cookies = await this.session.jar.getCookies(this.session.baseUrl);
+    const toidCookie = cookies.find(c => c.key === "toid");
+    if (!toidCookie) throw new Error("Geen toid cookie — sessie niet geldig.");
+    const activeTownId = parseInt(toidCookie.value);
 
-  // ── Blok bepalen ──────────────────────────────────────────
-  _getCurrentBlock() {
-    const blokken = this.config.dagschema?.blokken ?? [];
-    const now  = new Date();
-    const beTz = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Brussels" }));
-    const mins = beTz.getHours() * 60 + beTz.getMinutes();
-
-    for (const b of blokken) {
-      if (!b.actief) continue;
-      const [vh, vm] = b.van.split(":").map(Number);
-      const [th, tm] = b.tot === "24:00" ? [24, 0] : b.tot.split(":").map(Number);
-      if (mins >= vh * 60 + vm && mins < th * 60 + tm) {
-        const iv = this.intervals[b.interval];
-        return { ...b, interval: iv, key: b.interval };
-      }
-    }
-    return null;
-  }
-
-  // ── Delay berekening (log-normale jitter) ─────────────────
-  _calcDelay(blok) {
-    const timeOption = blok.interval.time_option_booty ?? blok.interval.time_option ?? 600;
-    const minDelay   = timeOption * 1000 + 30_000;
-    const base       = blok.interval.interval_minutes * 60 * 1000;
-    const u1 = Math.random(), u2 = Math.random();
-    const normal = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
-    const jitter = Math.abs(normal) * blok.interval.jitter_minutes * 60 * 1000;
-    const kans   = this.opties.extra_pauze_kans ?? 0.10;
-    const minMin = this.opties.extra_pauze_min_min ?? 5;
-    const maxMin = this.opties.extra_pauze_max_min ?? 10;
-    const extra  = Math.random() < kans
-      ? (minMin + Math.random() * (maxMin - minMin)) * 60 * 1000 : 0;
-    if (extra > 0) logger.info(`[Village Agent] Extra pauze (~${Math.round(extra/60000)} min)`);
-    return Math.max(minDelay, base + jitter + extra);
-  }
-
-  _sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-  _estimateRondesLeft(blok) {
-    const now  = new Date();
-    const beTz = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Brussels" }));
-    const mins = beTz.getHours() * 60 + beTz.getMinutes();
-    const [th, tm] = blok.tot === "24:00" ? [24, 0] : blok.tot.split(":").map(Number);
-    const minsLeft = th * 60 + tm - mins;
-    return Math.max(0, Math.floor(minsLeft / (blok.interval.interval_minutes ?? 10)));
-  }
-
-  // ── Hoofdloop ─────────────────────────────────────────────
-  async run() {
-    if (!this.running) return;
-
-    // Pauze check tussen rondes
-    if (this.roundNum > 0) {
-      const paused = await this.stats.isPaused();
-      if (paused) {
-        const status = await this.stats.readStatus();
-        const until  = status?.paused_until === "manual" ? "manuele hervatting" : `tot ${status?.paused_until}`;
-        logger.info(`[Village Agent] Bot gepauzeerd (${until}) → afsluiten.`);
-        await this._shutdown("paused");
-        return;
-      }
-    }
-
-    const blok = this._getCurrentBlock();
-    if (!blok) {
-      logger.info("[Village Agent] Buiten actief blok → afsluiten.");
-      await this._shutdown("no-block");
-      return;
-    }
-
-    this.roundNum++;
-    const start = Date.now();
-
-    logger.info(`── Ronde #${this.roundNum} | ${nlTime()} | ${blok.key} ──`);
-
-    // Update status
-    await this.stats.updateStatus({
-      bot_status:        "running",
-      current_session_id: this.sessionData.session_id,
-      current_round:     this.roundNum,
-      current_block:     `${blok.van}-${blok.tot}`,
-    });
-
-    let wood = 0, stone = 0, silver = 0, farms = 0;
-    let townSnapshots = [];
-
-    try {
-      this.api.resetTowns();
-      const towns = await this.api.getTowns();
-      const result = await this._farmAllTowns(towns, blok.key);
-      wood    = result.wood   ?? 0;
-      stone   = result.stone  ?? 0;
-      silver  = result.iron   ?? 0;
-      farms   = result.farms  ?? 0;
-      townSnapshots = result.townSnapshots ?? [];
-    } catch (err) {
-      if (err.message === "SESSION_EXPIRED") {
-        this.roundNum--;
-        this.totals.failed++;
-        if (this._recovering) {
-          logger.error("[Village Agent] Herstel mislukt → afsluiten.");
-          await this._shutdown("error");
-          return;
-        }
-        this._recovering = true;
-        logger.warn("[Village Agent] Sessie verlopen — herlogin via Puppeteer...");
-        try {
-          await this.api.session.login();
-          this.api.resetTowns();
-          this._recovering = false;
-          logger.info("[Village Agent] Sessie hersteld! Snelle ronde over 30 seconden.");
-          this.timer = setTimeout(() => this.run(), 30_000);
-        } catch (loginErr) {
-          logger.error(`[Village Agent] Herverbinden mislukt: ${loginErr.message}`);
-          await this._shutdown("error");
-        }
-        return;
-      }
-      logger.error(`[Village Agent] Fout ronde #${this.roundNum}: ${err.message}`);
-      this.totals.failed++;
-    }
-
-    const dur = ((Date.now() - start) / 1000).toFixed(1);
-
-    // Cumulatief bijhouden
-    this.totals.wood   += wood;
-    this.totals.stone  += stone;
-    this.totals.silver += silver;
-    this.totals.farms  += farms;
-    this.sessionData.rounds++;
-
-    if (farms > 0) {
-      logger.info(`[Village Agent] ✓ Ronde #${this.roundNum} | ${farms} dorpen | 🪵${wood} 🪨${stone} 🪙${silver} | ${dur}s`);
-      logger.info(`[Village Agent] Cumulatief | 🪵${this.totals.wood} 🪨${this.totals.stone} 🪙${this.totals.silver} | ${this.roundNum} rondes`);
-    } else {
-      logger.info(`[Village Agent] Ronde #${this.roundNum} | niets te halen | ${dur}s`);
-    }
-
-    // Sla ronde op
-    await this.stats.saveRound({
-      session_id:   this.sessionData.session_id,
-      timestamp:    new Date().toISOString(),
-      round_num:    this.roundNum,
-      interval_key: blok.key,
-      farms_total:  farms,
-      wood, stone, silver,
-      duration_sec: dur,
-      world:        this.config.account.world,
-    });
-
-    // Sla town snapshots op
-    if (townSnapshots.length > 0) {
-      await this.stats.saveTownSnapshots(townSnapshots.map(s => ({
-        ...s,
-        session_id: this.sessionData.session_id,
-        timestamp:  new Date().toISOString(),
-      })));
-    }
-
-    this._schedule(blok, farms);
-  }
-
-  // ── Scheduling ────────────────────────────────────────────
-  _schedule(blok, farms = 0) {
-    if (!this.running) return;
-
-    let delay = this._calcDelay(blok);
-
-    // Cooldown snap: als dorpen in cooldown zijn en dat binnen X min afloopt
-    const nextReady = this._nextReadyAt && isFinite(this._nextReadyAt) ? this._nextReadyAt : null;
-    if (nextReady && farms === 0) {
-      const cooldownMs = (nextReady * 1000) - Date.now();
-      const snapMin    = this.opties.cooldown_snap_min ?? 4;
-      if (cooldownMs > 0 && cooldownMs < snapMin * 60 * 1000) {
-        const secs = Math.ceil(cooldownMs / 1000);
-        logger.info(`[Village Agent] Cooldown snap: ophaling over ${secs}s`);
-        delay = Math.max(cooldownMs + 5000, 60_000);
-      }
-    }
-    this._nextReadyAt = null;
-
-    const nextRunAt = new Date(Date.now() + delay);
-
-    if (this.autoStopAt && nextRunAt >= this.autoStopAt) {
-      logger.info(`[Village Agent] Volgende ophaling (${nlTime(nextRunAt)}) valt na sessie-stop → afsluiten.`);
-      this._shutdown("auto-stop");
-      return;
-    }
-
-    const rondesLeft = this._estimateRondesLeft(blok);
-    logger.info(`[Village Agent] Volgende ophaling: ${nlTime(nextRunAt)} | nog ~${rondesLeft} rondes in dit blok`);
-
-    // Status updaten met volgende run
-    this.stats.updateStatus({ next_run_at: nextRunAt.toISOString() });
-
-    this.timer = setTimeout(() => this.run(), delay);
-  }
-
-  // ── Netjes afsluiten ──────────────────────────────────────
-  async _shutdown(reason) {
-    this.running = false;
-    if (this.timer) clearTimeout(this.timer);
-
-    this.sessionData.exit_reason  = reason;
-    this.sessionData.ended_at     = new Date().toISOString();
-    this.sessionData.wood         = this.totals.wood;
-    this.sessionData.stone        = this.totals.stone;
-    this.sessionData.silver       = this.totals.silver;
-    this.sessionData.farms        = this.totals.farms;
-    this.sessionData.failed_rounds = this.totals.failed;
-    this.sessionData.duration_sec = Math.round(
-      (new Date(this.sessionData.ended_at) - new Date(this.sessionData.started_at ?? this.sessionData.triggered_at)) / 1000
+    const data = await this.session.gameGet(
+      "farm_town_overviews", activeTownId, "index",
+      JSON.stringify({ town_id: activeTownId, nl_init: true })
     );
 
-    const durMin = Math.round(this.sessionData.duration_sec / 60);
-    logger.info(`[Sessions] Sessie afgerond | ${this.roundNum} rondes | 🪵${this.totals.wood} 🪨${this.totals.stone} 🪙${this.totals.silver} | ${durMin} min`);
+    // Bewaar loads_data voor nauwkeurige opbrengst-schatting
+    if (data?.loads_data) this._loadsData = data.loads_data;
 
-    await this.stats.saveSession(this.sessionData);
-    await this.stats.updateStatus({
-      bot_status:         "idle",
-      current_session_id: this.sessionData.session_id,
-      current_round:      this.roundNum,
-      last_session_exit:  reason,
-      last_login_method:  this.sessionData.login_method,
-      total_wood_today:   this.totals.wood,
-      total_stone_today:  this.totals.stone,
-      total_silver_today: this.totals.silver,
-    });
+    if (Array.isArray(data?.towns) && data.towns.length > 0) {
+      this._towns = data.towns.map(t => ({
+        id:               t.id,
+        name:             t.name,
+        island_x:         t.island_x,
+        island_y:         t.island_y,
+        booty_researched: t.booty_researched ?? false,
+        wood:             t.wood ?? 0,
+        stone:            t.stone ?? 0,
+        iron:             t.iron ?? 0,
+        storage_volume:   t.storage_volume ?? 0,
+      }));
+      logger.info(`[API] ${this._towns.length} steden: ${this._towns.map(t => `${t.name}(${t.booty_researched ? "booty" : "basis"})`).join(", ")}`);
+      return this._towns;
+    }
 
-    process.exit(0);
+    if (this.config.account.towns?.length > 0) {
+      this._towns = this.config.account.towns;
+      logger.info(`[API] ${this._towns.length} steden uit config`);
+      return this._towns;
+    }
+
+    throw new Error("Geen steden gevonden.");
   }
 
-  // ── Farm alle steden ──────────────────────────────────────
-  async _farmAllTowns(towns, intervalKey) {
-    const townResults  = [];
-    let earliestCooldown = null;
+  resetTowns() {
+    this._towns     = null;
+    this._loadsData = null;
+  }
 
-    for (let i = 0; i < towns.length; i++) {
-      const town = towns[i];
-      try {
-        const { owned, ready, nextReady } = await this.api.getFarmOverview(town);
-        townResults.push({ town, owned, ready });
-        if (nextReady && isFinite(nextReady)) {
-          earliestCooldown = earliestCooldown ? Math.min(earliestCooldown, nextReady) : nextReady;
-        }
-        if (i < towns.length - 1) await this._sleep(400 + Math.random() * 400);
-      } catch (err) {
-        if (err.message === "SESSION_EXPIRED") throw err;
-        logger.warn(`[Village Agent]   ${town.name} overview fout: ${err.message}`);
+  // Schat opbrengst op basis van loads_data (nauwkeurig) of ruwe formule (fallback)
+  estimateGain(town, readyCount, intervalKey) {
+    const config  = this.config;
+    const iv      = config.intervals?.[intervalKey];
+    const timeOpt = town.booty_researched
+      ? (iv?.time_option_booty ?? 600)
+      : (iv?.time_option_base  ?? 300);
+
+    if (this._loadsData?.[timeOpt]) {
+      const resources = this._loadsData[timeOpt].resources;
+      if (Array.isArray(resources) && resources.length > 0) {
+        // Gemiddelde van alle resource-niveaus × aantal klare dorpen
+        const avg = resources.reduce((a, b) => a + b, 0) / resources.length;
+        return avg * readyCount;
       }
     }
+    // Ruwe fallback
+    return town.booty_researched
+      ? timeOpt / 600 * 255 * readyCount
+      : timeOpt / 300 * 80  * readyCount;
+  }
 
-    const townsWithReady = townResults.filter(r => r.ready.length > 0);
+  async getFarmOverview(town) {
+    const payload = JSON.stringify({
+      island_x:             town.island_x ?? 0,
+      island_y:             town.island_y ?? 0,
+      current_town_id:      town.id,
+      booty_researched:     town.booty_researched ? "1" : "",
+      diplomacy_researched: "",
+      trade_office:         0,
+      town_id:              town.id,
+      nl_init:              false,
+    });
 
-    if (townsWithReady.length === 0) {
-      if (earliestCooldown && isFinite(earliestCooldown)) this._nextReadyAt = earliestCooldown;
-      logger.info("[Village Agent]   Geen dorpen klaar");
-      return { wood:0, stone:0, iron:0, farms:0, townSnapshots:[] };
+    const data = await this.session.gameGet(
+      "farm_town_overviews", town.id, "get_farm_towns_for_town", payload
+    );
+
+    if (typeof data === "string" && (data.includes("captcha") || data.includes("robot"))) {
+      throw new Error("CAPTCHA gedetecteerd");
     }
 
-    // Opslagcheck per stad via loads_data
-    const townsData = await this.api.getTowns();
-    for (const tr of townsWithReady) {
-      const td = townsData.find(t => t.id === tr.town.id);
-      if (!td?.storage_volume) continue;
+    const now      = Math.floor(Date.now() / 1000);
+    const farmList = data?.farm_town_list ?? [];
+    const owned    = farmList.filter(v => v.rel === 1);
+    const ready    = owned.filter(v => !v.loot || v.loot < now);
 
-      const cap  = td.storage_volume;
-      const gain = this.api.estimateGain(tr.town, tr.ready.length, intervalKey);
-      const overflows = [
-        (td.wood  ?? 0) + gain > cap * (this.opties.opslag_drempel_pct ?? 95) / 100,
-        (td.stone ?? 0) + gain > cap * (this.opties.opslag_drempel_pct ?? 95) / 100,
-        (td.iron  ?? 0) + gain > cap * (this.opties.opslag_drempel_pct ?? 95) / 100,
-      ].filter(Boolean).length;
-
-      if (overflows >= 2) {
-        const pW = Math.round((td.wood  ?? 0)/cap*100);
-        const pS = Math.round((td.stone ?? 0)/cap*100);
-        const pI = Math.round((td.iron  ?? 0)/cap*100);
-        logger.info(`[Village Agent]   ${tr.town.name}: overgeslagen — opslag bijna vol (🪵${pW}% 🪨${pS}% 🪙${pI}%)`);
-        tr.skip = true;
-      }
+    if (owned.length === 0 && !data?.farm_town_list) {
+      logger.warn(`[API] Lege response voor ${town.name} — mogelijk verlopen sessie`);
+      throw new Error("SESSION_EXPIRED");
     }
 
-    const townsToFarm = townsWithReady.filter(r => !r.skip);
-    if (townsToFarm.length === 0) return { wood:0, stone:0, iron:0, farms:0, townSnapshots:[] };
+    const cooldowns = owned.filter(v => v.loot && v.loot > now).map(v => v.loot);
+    const nextReady = cooldowns.length > 0 ? Math.min(...cooldowns) : null;
 
-    await this._sleep(400 + Math.random() * 800);
-
-    let totalWood = 0, totalStone = 0, totalIron = 0, totalFarms = 0;
-    let bestStorage  = null;
-    const townSnapshots = [];
-
-    for (let i = 0; i < townsToFarm.length; i++) {
-      const { town, owned, ready } = townsToFarm[i];
-      const filtered = owned.filter(() => Math.random() > (this.opties.dorp_overslaan_kans ?? 0.02));
-      if (filtered.length === 0) {
-        logger.info(`[Village Agent]   ${town.name}: overgeslagen (menselijk gedrag)`);
-        continue;
-      }
-      try {
-        const result = await this.api.claimLoads([town], filtered.map(v => v.id), intervalKey);
-        if (result) {
-          const pW = result.storageMax ? Math.round(result.storageWood /result.storageMax*100) : "?";
-          const pS = result.storageMax ? Math.round(result.storageStone/result.storageMax*100) : "?";
-          const pI = result.storageMax ? Math.round(result.storageIron /result.storageMax*100) : "?";
-          const wW = pW >= 90 ? "⚠️" : pW >= 80 ? "!" : "";
-          const wS = pS >= 90 ? "⚠️" : pS >= 80 ? "!" : "";
-          const wI = pI >= 90 ? "⚠️" : pI >= 80 ? "!" : "";
-          logger.info(`[Village Agent]   ${town.name}: +🪵${result.wood} +🪨${result.stone} +🪙${result.iron} (${ready.length} dorpen) | 🪵${pW}%${wW} 🪨${pS}%${wS} 🪙${pI}%${wI}`);
-          totalWood  += result.wood  ?? 0;
-          totalStone += result.stone ?? 0;
-          totalIron  += result.iron  ?? 0;
-          totalFarms += ready.length;
-          if (!bestStorage || (result.storageMax ?? 0) > (bestStorage.storageMax ?? 0)) bestStorage = result;
-
-          townSnapshots.push({
-            town_id:      town.id,
-            town_name:    town.name,
-            wood:         result.storageWood,
-            stone:        result.storageStone,
-            silver:       result.storageIron,
-            storage_max:  result.storageMax,
-            pct_wood:     pW,
-            pct_stone:    pS,
-            pct_silver:   pI,
-          });
-        } else {
-          logger.warn(`[Village Agent]   ${town.name}: claim geen resultaat`);
-        }
-        if (i < townsToFarm.length - 1) await this._sleep(800 + Math.random() * 800);
-      } catch (err) {
-        if (err.message === "SESSION_EXPIRED") throw err;
-        logger.warn(`[Village Agent]   ${town.name} claim fout: ${err.message}`);
-      }
+    if (nextReady && ready.length === 0) {
+      const minsLeft = Math.ceil((nextReady - now) / 60);
+      logger.info(`[API] ${town.name}: ${owned.length} dorpen, 0 klaar (eerste klaar over ~${minsLeft} min)`);
+    } else {
+      logger.info(`[API] ${town.name}: ${owned.length} dorpen, ${ready.length} klaar`);
     }
 
-    if (totalFarms === 0) return { wood:0, stone:0, iron:0, farms:0, townSnapshots:[] };
-    return {
-      wood: totalWood, stone: totalStone, iron: totalIron, farms: totalFarms,
-      storageWood:  bestStorage?.storageWood  ?? 0,
-      storageStone: bestStorage?.storageStone ?? 0,
-      storageIron:  bestStorage?.storageIron  ?? 0,
-      storageMax:   bestStorage?.storageMax   ?? 0,
-      townSnapshots,
-    };
+    return { owned, ready, nextReady };
+  }
+
+  async claimLoads(towns, farmTownIds, intervalKey) {
+    const activeTown = towns[0];
+    const iv         = this.config.intervals?.[intervalKey];
+    const timeOption = activeTown.booty_researched
+      ? (iv?.time_option_booty ?? 600)
+      : (iv?.time_option_base  ?? 300);
+
+    const payload = JSON.stringify({
+      farm_town_ids:   farmTownIds,
+      time_option:     timeOption,
+      claim_factor:    "normal",
+      current_town_id: activeTown.id,
+      town_id:         activeTown.id,
+      nl_init:         true,
+    });
+
+    const data = await this.session.gamePost(
+      "farm_town_overviews", activeTown.id, "claim_loads", payload
+    );
+
+    if (typeof data === "string" && (data.includes("captcha") || data.includes("robot"))) {
+      throw new Error("CAPTCHA gedetecteerd");
+    }
+
+    if (data?.success) {
+      const claimed = data.claimed_resources_per_resource_type ?? 0;
+      const storage = data.resources ?? {};
+      return {
+        wood:         claimed,
+        stone:        claimed,
+        iron:         claimed,
+        storageWood:  storage.wood  ?? 0,
+        storageStone: storage.stone ?? 0,
+        storageIron:  storage.iron  ?? 0,
+        storageMax:   data.storage  ?? 0,
+      };
+    }
+
+    if (data?.error) logger.warn(`[API] claim_loads fout: ${data.error}`);
+    return null;
   }
 }
 
-module.exports = VillageAgent;
+module.exports = GrepolisAPI;
