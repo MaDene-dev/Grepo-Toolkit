@@ -122,6 +122,58 @@ class GrepolisAPI {
   async claimLoads(towns, farmTownIds, intervalKey) {
     const activeTown = towns[0];
     const iv         = this.config.intervals?.[intervalKey];
+
+    // Gebruik claim_loads_multiple voor meerdere steden (één API call, zoals de UI)
+    if (towns.length > 1) {
+      const payload = JSON.stringify({
+        towns:             towns.map(t => t.id), // eigen stad-IDs, niet farm-dorp IDs
+        time_option_booty: iv?.time_option_booty ?? 600,
+        time_option_base:  iv?.time_option_base  ?? 300,
+        claim_factor:      "normal",
+        town_d:            activeTown.id,
+        nl_init:           true,
+      });
+
+      const data = await this.session.gamePost(
+        "farm_town_overviews", activeTown.id, "claim_loads_multiple", payload
+      );
+
+      if (typeof data === "string" && (data.includes("captcha") || data.includes("robot"))) {
+        throw new Error("CAPTCHA gedetecteerd");
+      }
+
+      if (data?.success) {
+        // claimed_resources bevat totaal over alle steden
+        // Kan een object zijn {wood: X, stone: Y, iron: Z} of een enkel getal
+        let wood = 0, stone = 0, iron = 0;
+        const cr = data.claimed_resources;
+        const crType = data.claimed_resources_per_resource_type;
+
+        if (cr && typeof cr === "object") {
+          wood  = cr.wood  ?? cr[1] ?? 0;
+          stone = cr.stone ?? cr[2] ?? 0;
+          iron  = cr.iron  ?? cr[3] ?? 0;
+        } else if (crType !== undefined) {
+          wood = stone = iron = crType;
+        }
+
+        // Log de ruwe response voor diagnose
+        logger.info(`[API] Claim response: claimed=${JSON.stringify(cr ?? crType).substring(0,100)}`);
+
+        const storage = data.resources ?? {};
+        return {
+          wood, stone, iron,
+          storageWood:  storage.wood  ?? 0,
+          storageStone: storage.stone ?? 0,
+          storageIron:  storage.iron  ?? 0,
+          storageMax:   data.storage  ?? 0,
+        };
+      }
+      if (data?.error) logger.warn(`[API] claim_loads_multiple fout: ${data.error}`);
+      return null;
+    }
+
+    // Enkele stad: gebruik claim_loads
     const timeOption = activeTown.booty_researched
       ? (iv?.time_option_booty ?? 600)
       : (iv?.time_option_base  ?? 300);
@@ -156,7 +208,6 @@ class GrepolisAPI {
         storageMax:   data.storage  ?? 0,
       };
     }
-
     if (data?.error) logger.warn(`[API] claim_loads fout: ${data.error}`);
     return null;
   }
