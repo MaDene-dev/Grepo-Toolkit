@@ -96,6 +96,12 @@ class StatsWriter {
     await this._post("saveRound", round);
   }
 
+  // ── Towns opslaan (na elke getTowns()) ──────────────────────
+  async saveTowns(towns) {
+    if (!towns?.length) return;
+    await this._post("saveTowns", { world: this.world, towns });
+  }
+
   // ── TownSnapshot opslaan ──────────────────────────────────
   async saveTownSnapshots(snapshots) {
     if (!snapshots?.length) return;
