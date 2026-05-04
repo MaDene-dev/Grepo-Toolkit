@@ -8,18 +8,15 @@ class StatsWriter {
     this.sessionId = null;
   }
 
-  // ── GAS API call ──────────────────────────────────────────
   async _post(action, payload) {
     if (!this.gasUrl || !this.gasSecret) return null;
     try {
-      const url  = new URL(this.gasUrl);
+      const url = new URL(this.gasUrl);
       url.searchParams.set("secret", this.gasSecret);
       url.searchParams.set("action", action);
-      const res  = await fetch(url.toString(), {
-        method:   "POST",
-        headers:  { "Content-Type": "application/json" },
-        body:     JSON.stringify(payload),
-        redirect: "follow",
+      const res = await fetch(url.toString(), {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload), redirect: "follow",
       });
       const text = await res.text();
       try { return JSON.parse(text); } catch (_) { return null; }
@@ -35,7 +32,7 @@ class StatsWriter {
       const url = new URL(this.gasUrl);
       url.searchParams.set("secret", this.gasSecret);
       url.searchParams.set("action", action);
-      for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+      for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
       const res  = await fetch(url.toString(), { redirect: "follow" });
       const text = await res.text();
       try { return JSON.parse(text); } catch (_) { return null; }
@@ -45,21 +42,11 @@ class StatsWriter {
     }
   }
 
-  // ── Status lezen (pre-check) ──────────────────────────────
+  // ── Status ────────────────────────────────────────────────
   async readStatus() {
-    const r = await this._get("getStatus");
-    if (!r) return null;
-    return r;
+    return await this._get("getStatus");
   }
 
-  // ── Laatste ophaling ophalen ──────────────────────────────
-  async getLastHarvest() {
-    const r = await this._get("getLastHarvest", { world: this.world });
-    if (!r?.timestamp) return null;
-    return new Date(r.timestamp);
-  }
-
-  // ── Status updaten ────────────────────────────────────────
   async updateStatus(fields) {
     await this._post("updateStatus", { world: this.world, ...fields });
   }
@@ -67,17 +54,41 @@ class StatsWriter {
   // ── Pauze check ───────────────────────────────────────────
   async isPaused() {
     const status = await this.readStatus();
-    if (!status) return false; // fail-open
+    if (!status) return false;
     if (status.bot_status !== "paused") return false;
     if (!status.paused_until || status.paused_until === "manual") return true;
     return new Date(status.paused_until) > new Date();
   }
 
+  // ── Laatste ophaling ──────────────────────────────────────
+  async getLastHarvest() {
+    const r = await this._get("getLastHarvest", { world: this.world });
+    if (!r?.timestamp) return null;
+    return new Date(r.timestamp);
+  }
+
+  // ── Harvest Queue ─────────────────────────────────────────
+  async getActiveQueueTask() {
+    const r = await this._get("getActiveQueueTask");
+    return r ?? null;
+  }
+
+  async activateQueueTask(queueId) {
+    return await this._post("activateQueueTask", { queue_id: queueId });
+  }
+
+  async updateQueueTask(queueId, fields) {
+    return await this._post("updateQueueTask", { queue_id: queueId, ...fields });
+  }
+
+  async completeQueueTask(queueId, totals) {
+    return await this._post("completeQueueTask", { queue_id: queueId, ...totals });
+  }
+
   // ── Sessie opslaan ────────────────────────────────────────
   async saveSession(session) {
     const r = await this._post("saveSession", session);
-    if (r?.ok) logger.info(`[Stats] Sessie opgeslagen ✓`);
-    else        logger.warn(`[Stats] Sessie opslaan mislukt`);
+    if (r?.ok) logger.info("[Stats] Sessie opgeslagen ✓");
   }
 
   // ── Ronde opslaan ─────────────────────────────────────────
@@ -87,6 +98,7 @@ class StatsWriter {
 
   // ── TownSnapshot opslaan ──────────────────────────────────
   async saveTownSnapshots(snapshots) {
+    if (!snapshots?.length) return;
     await this._post("saveTownSnapshots", { snapshots });
   }
 }
