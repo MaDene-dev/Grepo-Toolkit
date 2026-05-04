@@ -356,9 +356,8 @@ class VillageAgent {
         return { wood:0, stone:0, iron:0, farms:0, townSnapshots:[] };
       }
 
-      // Haal verse town data op voor nauwkeurige "na ophalen" opslag
-      this.api.resetTowns();
-      const townsNa = await this.api.getTowns();
+      // Na-data zit al in de claim response (towns array) — geen extra API call nodig
+      const townsNa = this.api._townsNaData ?? [];
       const townSnapshots = [];
 
       for (const { town, ready } of townsToFarm) {
