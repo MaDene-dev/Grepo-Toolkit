@@ -191,8 +191,9 @@ class VillageAgent {
       await this.stats.saveTowns(allTowns);
       // Sync nieuwe eilanden naar config.json
       await this.stats.syncEilanden(allTowns, this.eilanden);
-      // Gebouwen ophalen: max 5x per dag, op vaste momenten (8u, 11u, 14u, 18u, 22u BE)
-      if (this.roundNum === 1 && this._shouldFetchBuildings()) {
+      // Gebouwen ophalen: altijd bij GAS-trigger, anders max 5x per dag op vaste momenten
+      const isGasTrigger = ["gas","gas_override"].includes(this.sessionData.trigger_source);
+      if (this.roundNum === 1 && (isGasTrigger || this._shouldFetchBuildings())) {
         try {
           const buildings = await this.api.getBuildingOverview();
           await this.stats.saveBuildings(buildings);
