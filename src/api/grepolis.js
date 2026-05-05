@@ -28,6 +28,7 @@ class GrepolisAPI {
       this._towns = data.towns.map(t => ({
         id:               t.id,
         name:             t.name,
+        points:           t.points ?? 0,
         island_x:         t.island_x,
         island_y:         t.island_y,
         booty_researched: t.booty_researched ?? false,
@@ -53,6 +54,49 @@ class GrepolisAPI {
   resetTowns() {
     this._towns     = null;
     this._loadsData = null;
+  }
+
+  async getBuildingOverview() {
+    const towns = await this.getTowns();
+    if (!towns?.length) return {};
+
+    // Één call geeft gebouwen voor alle steden
+    const activeTown = towns[0];
+    const data = await this.session.gameGet(
+      "town_overviews", activeTown.id, "building_overview",
+      JSON.stringify({ town_id: activeTown.id, nl_init: true })
+    );
+
+    if (!data?.building_data) {
+      logger.warn("[API] Geen building_data in response");
+      return {};
+    }
+
+    const BUILDINGS = ["main","hide","lumber","stoner","ironer","market","docks",
+                       "barracks","wall","storage","farm","academy","temple",
+                       "theater","thermal","library","lighthouse","tower","statue","oracle","trade_office"];
+
+    const result = {};
+    for (const [townId, buildings] of Object.entries(data.building_data)) {
+      const town     = towns.find(t => String(t.id) === String(townId));
+      const townData = data.town_data?.[townId] ?? {};
+      const pop      = townData.available_population ?? {};
+
+      result[townId] = {
+        town_id:   parseInt(townId),
+        town_name: town?.name ?? townId,
+        pop_max:   pop.max ?? 0,
+        pop_used:  pop.blocked ?? 0,
+        buildings: {},
+      };
+
+      for (const key of BUILDINGS) {
+        result[townId].buildings[key] = buildings[key]?.level ?? 0;
+      }
+    }
+
+    logger.info(`[API] Gebouwen geladen voor ${Object.keys(result).length} steden`);
+    return result;
   }
 
   // Schat opbrengst op basis van loads_data (nauwkeurig) of ruwe formule (fallback)
