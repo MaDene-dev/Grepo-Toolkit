@@ -67,7 +67,24 @@ class GrepolisAPI {
       JSON.stringify({ town_id: activeTown.id, nl_init: true })
     );
 
-    if (!data?.building_data) {
+    // building_data zit soms embedded in HTML als JS object — parse het eruit
+    let buildingData = data?.building_data;
+    if (!buildingData) {
+      const raw = data?.plain?.html ?? "";
+      const match = raw.match(/var building_data = (\{.+?\});[\s\S]*?BuildingOverview/);
+      if (match) {
+        try { buildingData = JSON.parse(match[1]); } catch (_) {}
+      }
+      if (!buildingData) {
+        // Probeer ook in de json-string te zoeken
+        const match2 = JSON.stringify(data).match(/"building_data":(\{.+?\}),"town_data"/);
+        if (match2) {
+          try { buildingData = JSON.parse(match2[1]); } catch (_) {}
+        }
+      }
+    }
+
+    if (!buildingData) {
       logger.warn("[API] Geen building_data in response");
       return {};
     }
@@ -77,9 +94,9 @@ class GrepolisAPI {
                        "theater","thermal","library","lighthouse","tower","statue","oracle","trade_office"];
 
     const result = {};
-    for (const [townId, buildings] of Object.entries(data.building_data)) {
+    for (const [townId, buildings] of Object.entries(buildingData)) {
       const town     = towns.find(t => String(t.id) === String(townId));
-      const townData = data.town_data?.[townId] ?? {};
+      const townData = (data.town_data ?? data?.plain?.town_data ?? {})[townId] ?? {};
       const pop      = townData.available_population ?? {};
 
       result[townId] = {
