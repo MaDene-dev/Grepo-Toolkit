@@ -168,8 +168,8 @@ class GrepolisAPI {
     const activeTown = towns[0];
     const iv         = this.config.intervals?.[intervalKey];
 
-    // Gebruik claim_loads_multiple voor meerdere steden (één API call, zoals de UI)
-    if (towns.length > 1) {
+    // Altijd claim_loads_multiple gebruiken (ook voor 1 stad) — zoals de UI
+    if (towns.length >= 1) {
       const payload = JSON.stringify({
         towns:             towns.map(t => t.id), // eigen stad-IDs, niet farm-dorp IDs
         time_option_booty: iv?.time_option_booty ?? 600,
