@@ -96,6 +96,12 @@ class StatsWriter {
     await this._post("saveRound", round);
   }
 
+  // ── Gebouwen opslaan (één keer per sessie) ──────────────────
+  async saveBuildings(buildingData) {
+    if (!buildingData || Object.keys(buildingData).length === 0) return;
+    await this._post("saveBuildings", { world: this.world, buildings: buildingData });
+  }
+
   // ── Eilanden sync naar config.json ──────────────────────────
   async syncEilanden(towns, currentEilanden) {
     // Groepeer steden per eiland
