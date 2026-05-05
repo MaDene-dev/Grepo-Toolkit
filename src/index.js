@@ -124,7 +124,7 @@ async function boot() {
           process.exit(0);
         }
       }
-      const loginAt = new Date(nextPossible.getTime() - 45_000);
+      const loginAt = new Date(nextPossible.getTime() - 90_000); // 90s buffer voor Puppeteer + server-drift
       loginDelayMs = Math.max(0, loginAt.getTime() - Date.now());
       if (loginDelayMs > 1000) logger.info(`[Pre-check] Wacht tot ${nlTime(loginAt)} voor login`);
     }
