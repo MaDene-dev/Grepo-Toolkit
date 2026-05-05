@@ -191,6 +191,15 @@ class VillageAgent {
       await this.stats.saveTowns(allTowns);
       // Sync nieuwe eilanden naar config.json
       await this.stats.syncEilanden(allTowns, this.eilanden);
+      // Gebouwen ophalen: max 5x per dag, op vaste momenten (8u, 11u, 14u, 18u, 22u BE)
+      if (this.roundNum === 1 && this._shouldFetchBuildings()) {
+        try {
+          const buildings = await this.api.getBuildingOverview();
+          await this.stats.saveBuildings(buildings);
+        } catch (e) {
+          logger.warn(`[Village Agent] Gebouwen ophalen mislukt: ${e.message}`);
+        }
+      }
       const towns       = this._filterTownsPerEiland(allTowns);
       const intervalKey = this.harvestTask ? this.harvestTask.interval_key : blok.key;
       const result      = await this._farmAllTowns(towns, intervalKey);
@@ -348,6 +357,16 @@ class VillageAgent {
     });
 
     process.exit(0);
+  }
+
+  // ── Gebouwen fetch check ─────────────────────────────────────
+  _shouldFetchBuildings() {
+    const buildingHours = [8, 11, 14, 18, 22]; // Belgische uren
+    const beTz = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Brussels" }));
+    const hour = beTz.getHours();
+    const min  = beTz.getMinutes();
+    // Alleen in het eerste kwartier na een van de vaste uren
+    return buildingHours.includes(hour) && min < 15;
   }
 
   // ── Farm alle steden ──────────────────────────────────────
