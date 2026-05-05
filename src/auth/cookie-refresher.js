@@ -112,6 +112,17 @@ async function refreshCookies(config) {
 
     fs.writeFileSync(COOKIES_FILE, JSON.stringify(data, null, 2));
     logger.info(`[Puppeteer] ✓ ${data.length} cookies opgeslagen`);
+
+    // Update GREPO_COOKIES GitHub Secret zodat volgende run geen Puppeteer nodig heeft
+    if (process.env.GITHUB_TOKEN && process.env.GITHUB_REPOSITORY) {
+      try {
+        await _updateGitHubSecret(JSON.stringify(data));
+        logger.info("[Puppeteer] ✓ GREPO_COOKIES secret bijgewerkt");
+      } catch (e) {
+        logger.warn(`[Puppeteer] Secret bijwerken mislukt: ${e.message}`);
+      }
+    }
+
     return data;
 
   } finally {
@@ -120,3 +131,53 @@ async function refreshCookies(config) {
 }
 
 module.exports = { refreshCookies };
+
+async function _updateGitHubSecret(cookieJson) {
+  const https  = require("https");
+  const crypto = require("crypto");
+  const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
+  const token  = process.env.GITHUB_TOKEN;
+
+  // Stap 1: haal public key op
+  const pubKeyData = await _ghRequest("GET",
+    `/repos/${owner}/${repo}/actions/secrets/public-key`, null, token);
+
+  // Stap 2: encrypt met libsodium-wrappers
+  const sodium = require("libsodium-wrappers");
+  await sodium.ready;
+  const key       = sodium.from_base64(pubKeyData.key, sodium.base64_variants.ORIGINAL);
+  const msg       = sodium.from_string(cookieJson);
+  const encrypted = sodium.crypto_box_seal(msg, key);
+  const b64       = sodium.to_base64(encrypted, sodium.base64_variants.ORIGINAL);
+
+  // Stap 3: update secret
+  await _ghRequest("PUT",
+    `/repos/${owner}/${repo}/actions/secrets/GREPO_COOKIES`,
+    { encrypted_value: b64, key_id: pubKeyData.key_id }, token);
+}
+
+function _ghRequest(method, path, body, token) {
+  return new Promise((resolve, reject) => {
+    const opts = {
+      hostname: "api.github.com",
+      path, method,
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "User-Agent": "grepo-toolkit",
+        "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json",
+      },
+    };
+    const req = require("https").request(opts, res => {
+      let data = "";
+      res.on("data", c => data += c);
+      res.on("end", () => {
+        if (res.statusCode >= 400) return reject(new Error(`GitHub API ${res.statusCode}: ${data}`));
+        resolve(data ? JSON.parse(data) : {});
+      });
+    });
+    req.on("error", reject);
+    if (body) req.write(JSON.stringify(body));
+    req.end();
+  });
+}
