@@ -234,11 +234,18 @@ class GrepolisAPI {
         }
 
         // Sla bijgewerkte town data op voor voor/na vergelijking in village-agent
-        this._townsNaData = townList.map(t => ({
-          id: t.id, name: t.name,
-          wood: t.wood ?? 0, stone: t.stone ?? 0, iron: t.iron ?? 0,
-          storage_volume: t.storage_volume ?? 0,
-        }));
+        this._townsNaData = townList.map(t => {
+          const orig = this._lastTownsData?.find(o => o.id === t.id) ?? {};
+          return {
+            id: t.id, name: t.name,
+            island_x: orig.island_x ?? t.island_x ?? 0,
+            island_y: orig.island_y ?? t.island_y ?? 0,
+            booty_researched: orig.booty_researched ?? false,
+            wood: t.wood ?? 0, stone: t.stone ?? 0, iron: t.iron ?? 0,
+            storage_volume: t.storage_volume ?? 0,
+            points: t.points ?? orig.points ?? 0,
+          };
+        });
 
         return { wood: totalWood, stone: totalStone, iron: totalIron, storageWood, storageStone, storageIron, storageMax };
       }
