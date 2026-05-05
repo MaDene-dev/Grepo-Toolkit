@@ -60,29 +60,31 @@ class GrepolisAPI {
     const towns = await this.getTowns();
     if (!towns?.length) return {};
 
-    // Één call geeft gebouwen voor alle steden
     const activeTown = towns[0];
-    const data = await this.session.gameGet(
-      "town_overviews", activeTown.id, "building_overview",
-      JSON.stringify({ town_id: activeTown.id, nl_init: true })
+    // Gebruik raw call — gameGet retourneert alleen data.json, maar building_data zit in data.plain.html
+    const params = new URLSearchParams({
+      town_id: activeTown.id,
+      action:  "building_overview",
+      h:       this.session.csrfToken,
+      json:    JSON.stringify({ town_id: activeTown.id, nl_init: true }),
+      _:       Date.now(),
+    });
+    const res = await this.session.client.get(
+      `${this.session.baseUrl}/game/town_overviews?${params}`,
+      { headers: { ...this.session._headers(), "X-Requested-With": "XMLHttpRequest", Accept: "application/json, */*" } }
     );
+    const rawData = res.data;
 
-    // building_data zit soms embedded in HTML als JS object — parse het eruit
-    let buildingData = data?.building_data;
-    if (!buildingData) {
-      const raw = data?.plain?.html ?? "";
-      const match = raw.match(/var building_data = (\{.+?\});[\s\S]*?BuildingOverview/);
-      if (match) {
-        try { buildingData = JSON.parse(match[1]); } catch (_) {}
-      }
-      if (!buildingData) {
-        // Probeer ook in de json-string te zoeken
-        const match2 = JSON.stringify(data).match(/"building_data":(\{.+?\}),"town_data"/);
-        if (match2) {
-          try { buildingData = JSON.parse(match2[1]); } catch (_) {}
-        }
-      }
-    }
+    // building_data zit in plain.html als embedded JS variabele
+    const html = rawData?.plain?.html ?? "";
+    let buildingData = null;
+    let townData     = null;
+
+    const m1 = html.match(/var building_data = (\{[\s\S]+?\});\s*[\s\S]*?BuildingOverview/);
+    if (m1) { try { buildingData = JSON.parse(m1[1]); } catch (_) {} }
+
+    const m2 = html.match(/var town_data = (\{[\s\S]+?\});/);
+    if (m2) { try { townData = JSON.parse(m2[1]); } catch (_) {} }
 
     if (!buildingData) {
       logger.warn("[API] Geen building_data in response");
@@ -96,8 +98,8 @@ class GrepolisAPI {
     const result = {};
     for (const [townId, buildings] of Object.entries(buildingData)) {
       const town     = towns.find(t => String(t.id) === String(townId));
-      const townData = (data.town_data ?? data?.plain?.town_data ?? {})[townId] ?? {};
-      const pop      = townData.available_population ?? {};
+      const td = (townData ?? {})[townId] ?? {};
+      const pop      = td.available_population ?? {};
 
       result[townId] = {
         town_id:   parseInt(townId),
