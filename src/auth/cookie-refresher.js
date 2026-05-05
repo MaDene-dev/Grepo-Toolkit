@@ -90,7 +90,7 @@ async function refreshCookies(config) {
     const size = (await page.content()).length;
     logger.info(`[Puppeteer] Eindpagina: ${size} bytes`);
 
-    if (size < 50000) throw new Error(`Pagina te klein (${size} bytes) — login mislukt.`);
+    if (size < 50000) throw new Error(`Pagina te klein (${size} bytes) — mogelijk CAPTCHA of verificatiepagina.`);
 
     // Stap 4: Cookies ophalen en opslaan
     const cookies = await page.cookies(
@@ -104,6 +104,11 @@ async function refreshCookies(config) {
       path: c.path, secure: c.secure, httpOnly: c.httpOnly,
       expirationDate: c.expires > 0 ? c.expires : undefined,
     }));
+
+    // Minder dan 12 cookies = waarschijnlijk geen volledige game-sessie
+    if (data.length < 12) {
+      throw new Error(`Te weinig cookies (${data.length}) — mogelijk CAPTCHA of verificatie vereist. Log manueel in op grepolis.com.`);
+    }
 
     fs.writeFileSync(COOKIES_FILE, JSON.stringify(data, null, 2));
     logger.info(`[Puppeteer] ✓ ${data.length} cookies opgeslagen`);
