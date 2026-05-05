@@ -49,6 +49,8 @@ jobs:
         env:
           GREPO_EMAIL:          ${{ secrets.GREPO_EMAIL }}
           TRIGGER_SOURCE:       ${{ github.event.inputs.trigger_source || 'cron' }}
+          GITHUB_TOKEN:         ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY:    ${{ github.repository }}
           GREPO_PASSWORD:       ${{ secrets.GREPO_PASSWORD }}
           GAS_URL:              ${{ secrets.GAS_URL }}
           GAS_SECRET:           ${{ secrets.GAS_SECRET }}
