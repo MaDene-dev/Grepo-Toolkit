@@ -190,8 +190,7 @@ class VillageAgent {
       const allTowns    = await this.api.getTowns();
       await this.stats.saveTowns(allTowns);
       // Sync nieuwe eilanden naar config.json
-      await this.stats.syncEilanden(allTowns, this.eilanden);
-      // Gebouwen ophalen: altijd bij GAS-trigger, anders max 5x per dag op vaste momenten
+      await this.stats.syncEilanden(allTowns, this.eilanden);      // Gebouwen ophalen: altijd bij GAS-trigger, anders max 5x per dag op vaste momenten
       const isGasTrigger = ["gas","gas_override"].includes(this.sessionData.trigger_source);
       if (this.roundNum === 1 && (isGasTrigger || this._shouldFetchBuildings())) {
         try {
@@ -276,6 +275,11 @@ class VillageAgent {
       await this.stats.saveTownSnapshots(townSnapshots.map(s => ({
         ...s, session_id: this.sessionData.session_id, timestamp: new Date().toISOString(),
       })));
+    }
+
+    // Sla verse town data op na claim (resources zijn nu bijgewerkt)
+    if (this.api._townsNaData?.length > 0) {
+      await this.stats.saveTowns(this.api._townsNaData);
     }
 
     this._schedule(blok, farms);
