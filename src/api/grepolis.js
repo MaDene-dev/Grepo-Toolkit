@@ -207,6 +207,10 @@ class GrepolisAPI {
       }
 
       logger.info(`[API] claim_loads_multiple response keys: ${data ? Object.keys(data).join(", ") : "null"}`);
+      if (data?.towns?.length > 0) {
+        const t0 = data.towns[0];
+        logger.info(`[API] Town fields in claim: ${Object.keys(t0).join(", ")} | wood=${t0.wood} stone=${t0.stone} iron=${t0.iron}`);
+      }
 
       // Response bevat bijgewerkte towns array — geen success veld
       if (data?.towns && (Array.isArray(data.towns) ? data.towns.length > 0 : Object.keys(data.towns).length > 0)) {
