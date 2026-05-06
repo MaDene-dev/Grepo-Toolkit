@@ -35,16 +35,16 @@
     "475_506": {
       "naam": "04"
     },
+    "469_511": {
+      "naam": "03"
+    },
     "461_508": {
       "naam": "02",
       "primaire_stad_id": 802
     },
-    "469_511": {
-      "naam": "03"
-    },
     "475_503": {
       "naam": "01",
-      "primaire_stad_id": 329
+      "primaire_stad_id": 291
     }
   },
   "_uitleg": "Hoofdconfiguratiebestand. Account-gegevens via GREPO_ACCOUNT secret.",
@@ -88,6 +88,18 @@
       }
     ]
   },
+  "opties": {
+    "dorp_overslaan_kans": 0.02,
+    "captcha_pauze_min": 45,
+    "opslag_drempel_pct": 95,
+    "_uitleg": "Alle instelbare parameters",
+    "extra_pauze_min_min": 5,
+    "sessie_minuten": 45,
+    "precheck_buffer_min": 3,
+    "extra_pauze_max_min": 10,
+    "extra_pauze_kans": 0.1,
+    "cooldown_snap_min": 4
+  },
   "account": {
     "_uitleg": "Wordt overschreven door GREPO_ACCOUNT secret.",
     "world": "",
@@ -98,17 +110,5 @@
     "smtp_port": 587,
     "smtp_host": "smtp.gmail.com",
     "enabled": true
-  },
-  "opties": {
-    "dorp_overslaan_kans": 0.02,
-    "opslag_drempel_pct": 95,
-    "captcha_pauze_min": 45,
-    "extra_pauze_min_min": 5,
-    "_uitleg": "Alle instelbare parameters",
-    "precheck_buffer_min": 3,
-    "extra_pauze_max_min": 10,
-    "sessie_minuten": 45,
-    "extra_pauze_kans": 0.1,
-    "cooldown_snap_min": 4
   }
 }
