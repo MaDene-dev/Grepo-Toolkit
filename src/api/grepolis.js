@@ -48,9 +48,15 @@ class GrepolisAPI {
         resource_plenty:    t.resource_plenty ?? "",
         prod_wood:          t.production?.wood ?? 0,
         prod_stone:         t.production?.stone ?? 0,
-        prod_zilver:        t.production?.iron ?? 0,
+        prod_zilver:        t.production?.iron ?? t.production?.silver ?? 0,
       }));
       this._lastTownsData = this._towns; // bewaar voor voor/na vergelijking
+      // Log production object eenmalig voor diagnose
+      if (!this._prodLogged && this._towns.length > 0) {
+        this._prodLogged = true;
+        const t0raw = data.towns[0];
+        if (t0raw?.production) logger.info(`[API] Productie object: ${JSON.stringify(t0raw.production)}`);
+      }
       logger.info(`[API] ${this._towns.length} steden: ${this._towns.map(t => `${t.name}(${t.booty_researched ? "booty" : "basis"})`).join(", ")}`);
       return this._towns;
     }
@@ -269,7 +275,7 @@ class GrepolisAPI {
             resource_plenty: t.resource_plenty ?? orig.resource_plenty ?? "",
             prod_wood:  t.production?.wood  ?? orig.prod_wood  ?? 0,
             prod_stone: t.production?.stone ?? orig.prod_stone ?? 0,
-            prod_zilver: t.production?.iron ?? orig.prod_zilver ?? 0,
+            prod_zilver: t.production?.iron ?? t.production?.silver ?? orig.prod_zilver ?? 0,
           };
         });
 
