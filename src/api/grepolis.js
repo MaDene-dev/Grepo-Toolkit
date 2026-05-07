@@ -25,11 +25,6 @@ class GrepolisAPI {
     if (data?.loads_data) this._loadsData = data.loads_data;
 
     if (Array.isArray(data?.towns) && data.towns.length > 0) {
-      // Log beschikbare velden bij eerste run (voor diagnose)
-      if (!this._townFieldsLogged) {
-        this._townFieldsLogged = true;
-        logger.info(`[API] getTowns velden: ${Object.keys(data.towns[0]).join(", ")}`);
-      }
       this._towns = data.towns.map(t => ({
         id:                 t.id,
         name:               t.name,
@@ -53,7 +48,7 @@ class GrepolisAPI {
         resource_plenty:    t.resource_plenty ?? "",
         prod_wood:          t.production?.wood ?? 0,
         prod_stone:         t.production?.stone ?? 0,
-        prod_iron:          t.production?.iron ?? 0,
+        prod_zilver:        t.production?.iron ?? 0,
       }));
       this._lastTownsData = this._towns; // bewaar voor voor/na vergelijking
       logger.info(`[API] ${this._towns.length} steden: ${this._towns.map(t => `${t.name}(${t.booty_researched ? "booty" : "basis"})`).join(", ")}`);
@@ -225,10 +220,6 @@ class GrepolisAPI {
       }
 
       logger.info(`[API] claim_loads_multiple response keys: ${data ? Object.keys(data).join(", ") : "null"}`);
-      if (data?.towns?.length > 0) {
-        const t0 = data.towns[0];
-        logger.info(`[API] Town fields in claim: ${Object.keys(t0).join(", ")} | wood=${t0.wood} stone=${t0.stone} iron=${t0.iron}`);
-      }
 
       // Response bevat bijgewerkte towns array — geen success veld
       if (data?.towns && (Array.isArray(data.towns) ? data.towns.length > 0 : Object.keys(data.towns).length > 0)) {
@@ -278,7 +269,7 @@ class GrepolisAPI {
             resource_plenty: t.resource_plenty ?? orig.resource_plenty ?? "",
             prod_wood:  t.production?.wood  ?? orig.prod_wood  ?? 0,
             prod_stone: t.production?.stone ?? orig.prod_stone ?? 0,
-            prod_iron:  t.production?.iron  ?? orig.prod_iron  ?? 0,
+            prod_zilver: t.production?.iron ?? orig.prod_zilver ?? 0,
           };
         });
 
