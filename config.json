@@ -117,6 +117,11 @@
       "troops": "sea",
       "role": "def"
     },
+    "291": {
+      "note": "",
+      "role": "def",
+      "troops": "sea"
+    },
     "329": {
       "note": "",
       "troops": "land",
