@@ -1,21 +1,4 @@
 {
-  "eilanden": {
-    "_uitleg": "Welke stad grondstoffen ophaalt per eiland. Key = island_x_island_y",
-    "475_506": {
-      "naam": "04"
-    },
-    "461_508": {
-      "naam": "02",
-      "primaire_stad_id": 802
-    },
-    "469_511": {
-      "naam": "03"
-    },
-    "475_503": {
-      "naam": "01",
-      "primaire_stad_id": 329
-    }
-  },
   "intervals": {
     "A": {
       "jitter_minutes": 2,
@@ -34,17 +17,34 @@
     },
     "C": {
       "jitter_minutes": 10,
-      "interval_minutes": 180,
       "label": "3u",
+      "interval_minutes": 180,
       "time_option_booty": 10800,
       "time_option_base": 5400
     },
     "D": {
       "jitter_minutes": 20,
-      "label": "8u",
       "interval_minutes": 480,
+      "label": "8u",
       "time_option_booty": 28800,
       "time_option_base": 14400
+    }
+  },
+  "eilanden": {
+    "_uitleg": "Welke stad grondstoffen ophaalt per eiland. Key = island_x_island_y",
+    "475_506": {
+      "naam": "04"
+    },
+    "469_511": {
+      "naam": "03"
+    },
+    "461_508": {
+      "naam": "02",
+      "primaire_stad_id": 802
+    },
+    "475_503": {
+      "naam": "01",
+      "primaire_stad_id": 291
     }
   },
   "_uitleg": "Hoofdconfiguratiebestand. Account-gegevens via GREPO_ACCOUNT secret.",
@@ -101,13 +101,13 @@
   },
   "opties": {
     "dorp_overslaan_kans": 0.02,
-    "captcha_pauze_min": 45,
     "opslag_drempel_pct": 95,
+    "captcha_pauze_min": 45,
     "extra_pauze_min_min": 5,
     "_uitleg": "Alle instelbare parameters",
+    "precheck_buffer_min": 3,
     "extra_pauze_max_min": 10,
     "sessie_minuten": 45,
-    "precheck_buffer_min": 3,
     "extra_pauze_kans": 0.1,
     "cooldown_snap_min": 4
   }
