@@ -25,17 +25,35 @@ class GrepolisAPI {
     if (data?.loads_data) this._loadsData = data.loads_data;
 
     if (Array.isArray(data?.towns) && data.towns.length > 0) {
+      // Log beschikbare velden bij eerste run (voor diagnose)
+      if (!this._townFieldsLogged) {
+        this._townFieldsLogged = true;
+        logger.info(`[API] getTowns velden: ${Object.keys(data.towns[0]).join(", ")}`);
+      }
       this._towns = data.towns.map(t => ({
-        id:               t.id,
-        name:             t.name,
-        points:           t.points ?? 0,
-        island_x:         t.island_x,
-        island_y:         t.island_y,
-        booty_researched: t.booty_researched ?? false,
-        wood:             t.wood ?? 0,
-        stone:            t.stone ?? 0,
-        iron:             t.iron ?? 0,
-        storage_volume:   t.storage_volume ?? 0,
+        id:                 t.id,
+        name:               t.name,
+        points:             t.points ?? 0,
+        island_x:           t.island_x,
+        island_y:           t.island_y,
+        booty_researched:   t.booty_researched ?? false,
+        plow_researched:    t.plow_researched ?? false,
+        pottery_researched: t.pottery_researched ?? false,
+        wood:               t.wood ?? 0,
+        stone:              t.stone ?? 0,
+        iron:               t.iron ?? 0,
+        storage_volume:     t.storage_volume ?? 0,
+        free_population:    t.free_population ?? 0,
+        population:         t.population ?? 0,
+        god:                t.god ?? "",
+        farm_level:         t.farm_level ?? 0,
+        storage_level:      t.storage_level ?? 0,
+        thermal_level:      t.thermal_level ?? 0,
+        resource_rare:      t.resource_rare ?? "",
+        resource_plenty:    t.resource_plenty ?? "",
+        prod_wood:          t.production?.wood ?? 0,
+        prod_stone:         t.production?.stone ?? 0,
+        prod_iron:          t.production?.iron ?? 0,
       }));
       this._lastTownsData = this._towns; // bewaar voor voor/na vergelijking
       logger.info(`[API] ${this._towns.length} steden: ${this._towns.map(t => `${t.name}(${t.booty_researched ? "booty" : "basis"})`).join(", ")}`);
@@ -242,12 +260,25 @@ class GrepolisAPI {
           const orig = this._lastTownsData?.find(o => o.id === t.id) ?? {};
           return {
             id: t.id, name: t.name,
-            island_x: orig.island_x ?? t.island_x ?? 0,
-            island_y: orig.island_y ?? t.island_y ?? 0,
-            booty_researched: orig.booty_researched ?? false,
-            wood: t.wood ?? 0, stone: t.stone ?? 0, iron: t.iron ?? 0,
-            storage_volume: t.storage_volume ?? 0,
-            points: t.points ?? orig.points ?? 0,
+            points:             t.points ?? orig.points ?? 0,
+            island_x:           orig.island_x ?? t.island_x ?? 0,
+            island_y:           orig.island_y ?? t.island_y ?? 0,
+            booty_researched:   t.booty_researched ?? orig.booty_researched ?? false,
+            plow_researched:    t.plow_researched  ?? orig.plow_researched  ?? false,
+            pottery_researched: t.pottery_researched ?? orig.pottery_researched ?? false,
+            wood:            t.wood ?? 0, stone: t.stone ?? 0, iron: t.iron ?? 0,
+            storage_volume:  t.storage_volume ?? orig.storage_volume ?? 0,
+            free_population: t.free_population ?? 0,
+            population:      t.population ?? 0,
+            god:             t.god ?? orig.god ?? "",
+            farm_level:      t.farm_level    ?? orig.farm_level    ?? 0,
+            storage_level:   t.storage_level ?? orig.storage_level ?? 0,
+            thermal_level:   t.thermal_level ?? orig.thermal_level ?? 0,
+            resource_rare:   t.resource_rare   ?? orig.resource_rare   ?? "",
+            resource_plenty: t.resource_plenty ?? orig.resource_plenty ?? "",
+            prod_wood:  t.production?.wood  ?? orig.prod_wood  ?? 0,
+            prod_stone: t.production?.stone ?? orig.prod_stone ?? 0,
+            prod_iron:  t.production?.iron  ?? orig.prod_iron  ?? 0,
           };
         });
 
