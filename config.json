@@ -112,6 +112,11 @@
     "enabled": true
   },
   "town_meta": {
+    "290": {
+      "note": "",
+      "role": "def",
+      "troops": "sea"
+    },
     "329": {
       "note": "",
       "role": "def",
