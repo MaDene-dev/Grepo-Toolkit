@@ -127,6 +127,11 @@
       "troops": "land",
       "role": "def"
     },
+    "802": {
+      "note": "",
+      "role": "def",
+      "troops": "land"
+    },
     "1180": {
       "note": "",
       "role": "def",
