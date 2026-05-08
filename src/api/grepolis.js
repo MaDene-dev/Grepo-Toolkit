@@ -56,6 +56,8 @@ class GrepolisAPI {
         this._prodLogged = true;
         const t0raw = data.towns[0];
         if (t0raw?.production) logger.info(`[API] Productie object: ${JSON.stringify(t0raw.production)}`);
+        const godSample = data.towns.slice(0,4).map(t => `${t.name}:${JSON.stringify(t.god)}`).join(", ");
+        logger.info(`[API] God sample: ${godSample}`);
       }
       logger.info(`[API] ${this._towns.length} steden: ${this._towns.map(t => `${t.name}(${t.booty_researched ? "booty" : "basis"})`).join(", ")}`);
       return this._towns;
@@ -174,9 +176,29 @@ class GrepolisAPI {
       for (let i = from; i < str.length; i++) {
         if (str[i] === '{') { if (start < 0) start = i; depth++; }
         else if (str[i] === '}' && --depth === 0 && start >= 0)
-          return str.slice(start, i + 1);
+          return { json: str.slice(start, i + 1), end: i + 1 };
       }
       return null;
+    }
+
+    function parseBuildingsIntoQueue(html, pos, target) {
+      // Parseer alle aaneengesloten JSON-objecten als argumenten (voor $.extend met meerdere args)
+      while (pos < html.length) {
+        while (pos < html.length && /[\s,]/.test(html[pos])) pos++;
+        if (html[pos] !== '{') break;
+        const res = extractBraced(html, pos);
+        if (!res) break;
+        pos = res.end;
+        try {
+          const blds = JSON.parse(res.json);
+          for (const [key, bld] of Object.entries(blds)) {
+            target[key] = {
+              current: bld.current_level ?? bld.level ?? 0,
+              queued:  bld.level         ?? bld.current_level ?? 0,
+            };
+          }
+        } catch (_) {}
+      }
     }
 
     const queues = {}; // townId → { key → { current, queued } }
@@ -194,38 +216,19 @@ class GrepolisAPI {
           { headers: { ...this.session._headers(), "X-Requested-With": "XMLHttpRequest", Accept: "application/json, */*" } }
         );
         const h2 = r2.data?.json?.html ?? r2.data?.plain?.html ?? "";
+        queues[String(town.id)] = {};
+
+        // Reguliere gebouwen: BuildingMain.buildings = {...}
         const bMatch = h2.match(/BuildingMain\.buildings\s*=\s*/);
         if (bMatch) {
-          const jsonStr = extractBraced(h2, bMatch.index + bMatch[0].length);
-          if (jsonStr) {
-            const bldMain = JSON.parse(jsonStr);
-            queues[String(town.id)] = {};
-            for (const [key, bld] of Object.entries(bldMain)) {
-              queues[String(town.id)][key] = {
-                current: bld.current_level ?? bld.level ?? 0,
-                queued:  bld.level         ?? bld.current_level ?? 0,
-              };
-            }
-          }
+          parseBuildingsIntoQueue(h2, bMatch.index + bMatch[0].length, queues[String(town.id)]);
         }
 
-        // Speciale gebouwen zitten in $.extend(BuildingMain.special_buildings_combined_group, {...})
-        if (!queues[String(town.id)]) queues[String(town.id)] = {};
-        const extRe = /\$\.extend\s*\(\s*BuildingMain\.special_buildings_combined_group\s*,\s*/g;
-        let extMatch;
-        while ((extMatch = extRe.exec(h2)) !== null) {
-          const jsonStr2 = extractBraced(h2, extMatch.index + extMatch[0].length);
-          if (jsonStr2) {
-            try {
-              const specBlds = JSON.parse(jsonStr2);
-              for (const [key, bld] of Object.entries(specBlds)) {
-                queues[String(town.id)][key] = {
-                  current: bld.current_level ?? bld.level ?? 0,
-                  queued:  bld.level         ?? bld.current_level ?? 0,
-                };
-              }
-            } catch (_) {}
-          }
+        // Speciale gebouwen: $.extend(BuildingMain.special_buildings_combined_group, {obj1}, {obj2})
+        // Eén $.extend call met meerdere JSON-objecten als argumenten
+        const extMatch2 = h2.match(/\$\.extend\s*\(\s*BuildingMain\.special_buildings_combined_group\s*,\s*/);
+        if (extMatch2) {
+          parseBuildingsIntoQueue(h2, extMatch2.index + extMatch2[0].length, queues[String(town.id)]);
         }
 
         const inQueue = Object.entries(queues[String(town.id)])
