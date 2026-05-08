@@ -2,8 +2,8 @@
   "intervals": {
     "A": {
       "jitter_minutes": 2,
-      "interval_minutes": 10,
       "label": "10 min",
+      "interval_minutes": 10,
       "time_option_booty": 600,
       "time_option_base": 300
     },
@@ -24,8 +24,8 @@
     },
     "D": {
       "jitter_minutes": 20,
-      "label": "8u",
       "interval_minutes": 480,
+      "label": "8u",
       "time_option_booty": 28800,
       "time_option_base": 14400
     }
@@ -86,12 +86,18 @@
       },
       {
         "tot": "02:00",
-        "van": "23:00",
-        "interval": "D",
+        "van": "00:30",
+        "interval": "B",
         "_opmerking": "Laat",
-        "actief": false
+        "actief": true
       }
     ]
+  },
+  "account": {
+    "_uitleg": "Wordt overschreven door GREPO_ACCOUNT secret.",
+    "world": "",
+    "player_id": 0,
+    "towns": []
   },
   "opties": {
     "dorp_overslaan_kans": 0.02,
@@ -99,17 +105,11 @@
     "captcha_pauze_min": 45,
     "_uitleg": "Alle instelbare parameters",
     "extra_pauze_min_min": 5,
-    "sessie_minuten": 45,
     "precheck_buffer_min": 3,
+    "sessie_minuten": 45,
     "extra_pauze_max_min": 10,
     "extra_pauze_kans": 0.1,
     "cooldown_snap_min": 4
-  },
-  "account": {
-    "_uitleg": "Wordt overschreven door GREPO_ACCOUNT secret.",
-    "player_id": 0,
-    "world": "",
-    "towns": []
   },
   "email": {
     "smtp_port": 587,
