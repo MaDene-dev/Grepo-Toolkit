@@ -164,44 +164,50 @@ class GrepolisAPI {
                        "barracks","wall","storage","farm","academy","temple",
                        "theater","thermal","library","lighthouse","tower","statue","oracle","trade_office"];
 
-    // Per-stad call om bouwwachtrij te vinden
-    const queues = {}; // townId → { buildingKey → queued_level }
-    for (const town of towns) {
+    // Per-stad senate call om bouwwachtrij te vinden
+    // Enkel voor steden die niet volledig uitgebouwd zijn
+    const devThresh = this.config?.opties?.uitgebouwd_punten ?? 20000;
+    const townsToCheck = towns.filter(t => (t.points ?? 0) < devThresh);
+    logger.info(`[API] Bouwwachtrij ophalen voor ${townsToCheck.length}/${towns.length} steden (onder drempel)`);
+
+    const queues = {}; // townId → [{ building_key, current_level, target_level, finish_time }]
+    for (const town of townsToCheck) {
       try {
         const p2 = new URLSearchParams({
           town_id: town.id,
-          action:  "building_overview",
+          action:  "index",
           h:       this.session.csrfToken,
-          json:    JSON.stringify({ town_id: town.id }),
+          json:    JSON.stringify({ town_id: town.id, nl_init: true }),
           _:       Date.now(),
         });
         const r2 = await this.session.client.get(
-          `${this.session.baseUrl}/game/town_overviews?${p2}`,
+          `${this.session.baseUrl}/game/building_main?${p2}`,
           { headers: { ...this.session._headers(), "X-Requested-With": "XMLHttpRequest", Accept: "application/json, */*" } }
         );
-        const h2 = r2.data?.plain?.html ?? "";
+        const h2 = r2.data?.plain?.html ?? r2.data?.json ?? "";
+        const htmlStr = typeof h2 === "string" ? h2 : JSON.stringify(h2);
 
-        // Debug: zoek queue-variabelen (eenmalig)
+        // Debug: log alle JS vars (eenmalig)
         if (!this._queueVarsLogged) {
           this._queueVarsLogged = true;
-          const vars = [...h2.matchAll(/var (\w+)\s*=/g)].map(m => m[1]);
-          logger.info(`[API] JS vars in per-stad HTML: ${vars.join(", ")}`);
-          // Zoek expliciet naar order/queue/build gerelateerde vars
-          const qvars = vars.filter(v => /order|queue|build/i.test(v));
+          const vars = [...htmlStr.matchAll(/var (\w+)\s*=/g)].map(m => m[1]);
+          logger.info(`[API] Senate vars voor ${town.name}: ${vars.join(", ") || "geen"}`);
+          const qvars = vars.filter(v => /order|queue|build|group/i.test(v));
           logger.info(`[API] Queue-gerelateerde vars: ${qvars.join(", ") || "geen"}`);
-          // Log sample van de interessante vars
-          for (const v of qvars.slice(0, 3)) {
-            const vm = h2.match(new RegExp(`var ${v}\\s*=\\s*([\\s\\S]{0,300})`));
-            if (vm) logger.info(`[API] ${v} = ${vm[1].slice(0,200)}`);
+          for (const v of qvars.slice(0, 5)) {
+            const vm = htmlStr.match(new RegExp(`var ${v}\\s*=\\s*([\\s\\S]{0,400})`));
+            if (vm) logger.info(`[API] ${v} = ${vm[1].slice(0, 300)}`);
           }
+          // Log ook JSON keys als response JSON is
+          if (r2.data?.json) logger.info(`[API] Senate JSON keys: ${Object.keys(r2.data.json).join(", ")}`);
         }
 
-        queues[String(town.id)] = { html: h2 };
+        queues[String(town.id)] = { html: htmlStr };
       } catch (e) {
-        logger.warn(`[API] Queue fetch mislukt voor ${town.id}: ${e.message}`);
+        logger.warn(`[API] Senate call mislukt voor ${town.name}: ${e.message}`);
       }
     }
-    logger.info(`[API] Queue HTML opgehaald voor ${Object.keys(queues).length} steden`);
+    logger.info(`[API] Queue data opgehaald voor ${Object.keys(queues).length} steden`);
 
     const result = {};
     for (const [townId, buildings] of Object.entries(buildingData)) {
