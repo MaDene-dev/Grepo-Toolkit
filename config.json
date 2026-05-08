@@ -44,7 +44,7 @@
     },
     "475_503": {
       "naam": "01",
-      "primaire_stad_id": 329
+      "primaire_stad_id": 291
     }
   },
   "_uitleg": "Hoofdconfiguratiebestand. Account-gegevens via GREPO_ACCOUNT secret.",
@@ -92,24 +92,24 @@
     "dorp_overslaan_kans": 0.02,
     "opslag_drempel_pct": 95,
     "captcha_pauze_min": 45,
-    "_uitleg": "Alle instelbare parameters",
     "extra_pauze_min_min": 5,
+    "_uitleg": "Alle instelbare parameters",
     "precheck_buffer_min": 3,
-    "sessie_minuten": 45,
     "extra_pauze_max_min": 10,
+    "sessie_minuten": 45,
     "extra_pauze_kans": 0.1,
     "cooldown_snap_min": 4
-  },
-  "account": {
-    "_uitleg": "Wordt overschreven door GREPO_ACCOUNT secret.",
-    "world": "",
-    "player_id": 0,
-    "towns": []
   },
   "email": {
     "smtp_port": 587,
     "smtp_host": "smtp.gmail.com",
     "enabled": true
+  },
+  "account": {
+    "_uitleg": "Wordt overschreven door GREPO_ACCOUNT secret.",
+    "player_id": 0,
+    "world": "",
+    "towns": []
   },
   "town_meta": {
     "290": {
