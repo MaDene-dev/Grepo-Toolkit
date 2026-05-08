@@ -184,25 +184,29 @@ class GrepolisAPI {
           `${this.session.baseUrl}/game/building_main?${p2}`,
           { headers: { ...this.session._headers(), "X-Requested-With": "XMLHttpRequest", Accept: "application/json, */*" } }
         );
-        const h2 = r2.data?.plain?.html ?? r2.data?.json ?? "";
-        const htmlStr = typeof h2 === "string" ? h2 : JSON.stringify(h2);
+        const h2    = r2.data?.json?.html ?? r2.data?.plain?.html ?? "";
+        const j2    = r2.data?.json?.json;  // mogelijk directe JSON met wachtrij
 
-        // Debug: log alle JS vars (eenmalig)
+        // Debug: log response structuur (eenmalig)
         if (!this._queueVarsLogged) {
           this._queueVarsLogged = true;
-          const vars = [...htmlStr.matchAll(/var (\w+)\s*=/g)].map(m => m[1]);
-          logger.info(`[API] Senate vars voor ${town.name}: ${vars.join(", ") || "geen"}`);
+          // Controleer JSON-veld
+          if (j2) {
+            logger.info(`[API] Senate json.json keys voor ${town.name}: ${Object.keys(j2).join(", ")}`);
+            logger.info(`[API] Senate json.json sample: ${JSON.stringify(j2).slice(0, 400)}`);
+          } else {
+            logger.info(`[API] Senate json.json = null/leeg`);
+          }
+          // Zoek vars in HTML
+          const vars = [...h2.matchAll(/var (\w+)\s*=/g)].map(m => m[1]);
+          logger.info(`[API] Senate HTML vars: ${vars.join(", ") || "geen"}`);
           const qvars = vars.filter(v => /order|queue|build|group/i.test(v));
-          logger.info(`[API] Queue-gerelateerde vars: ${qvars.join(", ") || "geen"}`);
           for (const v of qvars.slice(0, 5)) {
-            const vm = htmlStr.match(new RegExp(`var ${v}\\s*=\\s*([\\s\\S]{0,400})`));
+            const vm = h2.match(new RegExp(`var ${v}\\s*=\\s*([\\s\\S]{0,400})`));
             if (vm) logger.info(`[API] ${v} = ${vm[1].slice(0, 300)}`);
           }
-          // Log ook JSON keys als response JSON is
-          if (r2.data?.json) logger.info(`[API] Senate JSON keys: ${Object.keys(r2.data.json).join(", ")}`);
         }
-
-        queues[String(town.id)] = { html: htmlStr };
+        queues[String(town.id)] = { html: h2, json: j2 };
       } catch (e) {
         logger.warn(`[API] Senate call mislukt voor ${town.name}: ${e.message}`);
       }
