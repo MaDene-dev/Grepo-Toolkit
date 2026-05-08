@@ -102,6 +102,12 @@ class StatsWriter {
     await this._post("saveBuildings", { world: this.world, buildings: buildingData });
   }
 
+  // ── Grotten opslaan ─────────────────────────────────────────
+  async saveHides(hideData) {
+    if (!hideData || Object.keys(hideData).length === 0) return;
+    await this._post("saveHides", { world: this.world, hides: hideData });
+  }
+
   // ── Eilanden sync naar config.json ──────────────────────────
   async syncEilanden(towns, currentEilanden) {
     // Groepeer steden per eiland
