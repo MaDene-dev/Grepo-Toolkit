@@ -206,15 +206,35 @@ class GrepolisAPI {
                 queued:  bld.level         ?? bld.current_level ?? 0,
               };
             }
-            const inQueue = Object.entries(queues[String(town.id)])
-              .filter(([, q]) => q.queued > q.current)
-              .map(([k, q]) => `${k}:${q.current}→${q.queued}`);
-            if (inQueue.length)
-              logger.info(`[API] ${town.name} wachtrij: ${inQueue.join(", ")}`);
           }
-        } else {
-          logger.warn(`[API] BuildingMain.buildings niet gevonden voor ${town.name} (html-len=${h2.length})`);
         }
+
+        // Speciale gebouwen zitten in $.extend(BuildingMain.special_buildings_combined_group, {...})
+        if (!queues[String(town.id)]) queues[String(town.id)] = {};
+        const extRe = /\$\.extend\s*\(\s*BuildingMain\.special_buildings_combined_group\s*,\s*/g;
+        let extMatch;
+        while ((extMatch = extRe.exec(h2)) !== null) {
+          const jsonStr2 = extractBraced(h2, extMatch.index + extMatch[0].length);
+          if (jsonStr2) {
+            try {
+              const specBlds = JSON.parse(jsonStr2);
+              for (const [key, bld] of Object.entries(specBlds)) {
+                queues[String(town.id)][key] = {
+                  current: bld.current_level ?? bld.level ?? 0,
+                  queued:  bld.level         ?? bld.current_level ?? 0,
+                };
+              }
+            } catch (_) {}
+          }
+        }
+
+        const inQueue = Object.entries(queues[String(town.id)])
+          .filter(([, q]) => q.queued > q.current)
+          .map(([k, q]) => `${k}:${q.current}→${q.queued}`);
+        if (inQueue.length)
+          logger.info(`[API] ${town.name} wachtrij: ${inQueue.join(", ")}`);
+        else if (!queues[String(town.id)] || !Object.keys(queues[String(town.id)]).length)
+          logger.warn(`[API] BuildingMain.buildings niet gevonden voor ${town.name} (html-len=${h2.length})`);
       } catch (e) {
         logger.warn(`[API] Senate call mislukt voor ${town.name}: ${e.message}`);
       }
@@ -240,7 +260,7 @@ class GrepolisAPI {
         const q = qd[key];
         result[townId].buildings[key] = {
           level:      q ? q.current : (buildings[key]?.level ?? 0),
-          queued:     q ? q.queued  : (buildings[key]?.level ?? 0),
+          next_level: q ? q.queued  : (buildings[key]?.level ?? 0),
         };
       }
 
