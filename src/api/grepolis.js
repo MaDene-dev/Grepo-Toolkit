@@ -141,7 +141,6 @@ class GrepolisAPI {
     if (!towns?.length) return {};
 
     const activeTown = towns[0];
-    // Gebruik raw call — gameGet retourneert alleen data.json, maar building_data zit in data.plain.html
     const params = new URLSearchParams({
       town_id: activeTown.id,
       action:  "building_overview",
@@ -153,33 +152,62 @@ class GrepolisAPI {
       `${this.session.baseUrl}/game/town_overviews?${params}`,
       { headers: { ...this.session._headers(), "X-Requested-With": "XMLHttpRequest", Accept: "application/json, */*" } }
     );
-    const rawData = res.data;
-
-    // building_data zit in plain.html als embedded JS variabele
-    const html = rawData?.plain?.html ?? "";
-    let buildingData = null;
-    let townData     = null;
-
+    const html = res.data?.plain?.html ?? "";
+    let buildingData = null, townData = null;
     const m1 = html.match(/var building_data = (\{[\s\S]+?\});\s*[\s\S]*?BuildingOverview/);
     if (m1) { try { buildingData = JSON.parse(m1[1]); } catch (_) {} }
-
     const m2 = html.match(/var town_data = (\{[\s\S]+?\});/);
     if (m2) { try { townData = JSON.parse(m2[1]); } catch (_) {} }
-
-    if (!buildingData) {
-      logger.warn("[API] Geen building_data in response");
-      return {};
-    }
+    if (!buildingData) { logger.warn("[API] Geen building_data in response"); return {}; }
 
     const BUILDINGS = ["main","hide","lumber","stoner","ironer","market","docks",
                        "barracks","wall","storage","farm","academy","temple",
                        "theater","thermal","library","lighthouse","tower","statue","oracle","trade_office"];
 
+    // Per-stad call om bouwwachtrij te vinden
+    const queues = {}; // townId → { buildingKey → queued_level }
+    for (const town of towns) {
+      try {
+        const p2 = new URLSearchParams({
+          town_id: town.id,
+          action:  "building_overview",
+          h:       this.session.csrfToken,
+          json:    JSON.stringify({ town_id: town.id }),
+          _:       Date.now(),
+        });
+        const r2 = await this.session.client.get(
+          `${this.session.baseUrl}/game/town_overviews?${p2}`,
+          { headers: { ...this.session._headers(), "X-Requested-With": "XMLHttpRequest", Accept: "application/json, */*" } }
+        );
+        const h2 = r2.data?.plain?.html ?? "";
+
+        // Debug: zoek queue-variabelen (eenmalig)
+        if (!this._queueVarsLogged) {
+          this._queueVarsLogged = true;
+          const vars = [...h2.matchAll(/var (\w+)\s*=/g)].map(m => m[1]);
+          logger.info(`[API] JS vars in per-stad HTML: ${vars.join(", ")}`);
+          // Zoek expliciet naar order/queue/build gerelateerde vars
+          const qvars = vars.filter(v => /order|queue|build/i.test(v));
+          logger.info(`[API] Queue-gerelateerde vars: ${qvars.join(", ") || "geen"}`);
+          // Log sample van de interessante vars
+          for (const v of qvars.slice(0, 3)) {
+            const vm = h2.match(new RegExp(`var ${v}\\s*=\\s*([\\s\\S]{0,300})`));
+            if (vm) logger.info(`[API] ${v} = ${vm[1].slice(0,200)}`);
+          }
+        }
+
+        queues[String(town.id)] = { html: h2 };
+      } catch (e) {
+        logger.warn(`[API] Queue fetch mislukt voor ${town.id}: ${e.message}`);
+      }
+    }
+    logger.info(`[API] Queue HTML opgehaald voor ${Object.keys(queues).length} steden`);
+
     const result = {};
     for (const [townId, buildings] of Object.entries(buildingData)) {
-      const town     = towns.find(t => String(t.id) === String(townId));
-      const td = (townData ?? {})[townId] ?? {};
-      const pop      = td.available_population ?? {};
+      const town = towns.find(t => String(t.id) === String(townId));
+      const td   = (townData ?? {})[townId] ?? {};
+      const pop  = td.available_population ?? {};
 
       result[townId] = {
         town_id:   parseInt(townId),
@@ -198,17 +226,6 @@ class GrepolisAPI {
     }
 
     logger.info(`[API] Gebouwen geladen voor ${Object.keys(result).length} steden`);
-    // Debug: toon structuur van eerste stad
-    const sampleId = Object.keys(result)[0];
-    if (sampleId) {
-      const s = result[sampleId].buildings;
-      logger.info(`[API] Building sample ${result[sampleId].town_name}: main=${JSON.stringify(s.main)} farm=${JSON.stringify(s.farm)}`);
-      // Toon ook ruwe buildingData structuur
-      const raw = buildingData[sampleId];
-      logger.info(`[API] Raw buildingData keys voor ${sampleId}: ${Object.keys(raw||{}).slice(0,5).join(",")}`);
-      const rawMain = raw?.main;
-      logger.info(`[API] Raw main: ${JSON.stringify(rawMain)}`);
-    }
     return result;
   }
 
