@@ -75,6 +75,48 @@ class GrepolisAPI {
     this._loadsData = null;
   }
 
+  async getHidesOverview() {
+    const towns = await this.getTowns();
+    if (!towns?.length) return {};
+
+    const activeTown = towns[0];
+    const params = new URLSearchParams({
+      town_id: activeTown.id,
+      action:  "hides_overview",
+      h:       this.session.csrfToken,
+      json:    JSON.stringify({ town_id: activeTown.id, nl_init: true }),
+      _:       Date.now(),
+    });
+    const res = await this.session.client.get(
+      `${this.session.baseUrl}/game/town_overviews?${params}`,
+      { headers: { ...this.session._headers(), "X-Requested-With": "XMLHttpRequest", Accept: "application/json, */*" } }
+    );
+
+    const html = res.data?.plain?.html ?? "";
+    // Parse: initializeResourcesCounter(resources, hideData)
+    const m = html.match(/initializeResourcesCounter\s*\([^,]+,\s*(\{[^)]+\})\)/);
+    if (!m) {
+      logger.warn("[API] Geen grotten-data in response");
+      return {};
+    }
+    try {
+      const hideData = JSON.parse(m[1]);
+      const result = {};
+      for (const [townId, d] of Object.entries(hideData)) {
+        result[townId] = {
+          town_id:     parseInt(townId),
+          hide_stored: d.iron_stored ?? 0,
+          hide_max:    d.max_storage ?? 0, // -1=onbeperkt, 0=geen grot
+        };
+      }
+      logger.info(`[API] Grotten geladen voor ${Object.keys(result).length} steden`);
+      return result;
+    } catch (e) {
+      logger.warn(`[API] Grotten parse fout: ${e.message}`);
+      return {};
+    }
+  }
+
   async getBuildingOverview() {
     const towns = await this.getTowns();
     if (!towns?.length) return {};
