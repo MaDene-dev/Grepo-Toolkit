@@ -196,6 +196,8 @@ class VillageAgent {
         try {
           const buildings = await this.api.getBuildingOverview();
           await this.stats.saveBuildings(buildings);
+          const hides = await this.api.getHidesOverview();
+          await this.stats.saveHides(hides);
         } catch (e) {
           logger.warn(`[Village Agent] Gebouwen ophalen mislukt: ${e.message}`);
         }
