@@ -57,7 +57,7 @@
     "_uitleg": "Wanneer de bot actief is. Tijden zijn Belgisch.",
     "blokken": [
       {
-        "tot": "02:30",
+        "tot": "03:00",
         "van": "01:30",
         "interval": "C",
         "_opmerking": "Nacht",
