@@ -2,8 +2,8 @@
   "intervals": {
     "A": {
       "jitter_minutes": 2,
-      "label": "10 min",
       "interval_minutes": 10,
+      "label": "10 min",
       "time_option_booty": 600,
       "time_option_base": 300
     },
@@ -17,8 +17,8 @@
     },
     "C": {
       "jitter_minutes": 10,
-      "label": "3u",
       "interval_minutes": 180,
+      "label": "3u",
       "time_option_booty": 10800,
       "time_option_base": 5400
     },
@@ -35,16 +35,16 @@
     "475_506": {
       "naam": "04"
     },
+    "469_511": {
+      "naam": "03"
+    },
     "461_508": {
       "naam": "02",
       "primaire_stad_id": 802
     },
-    "469_511": {
-      "naam": "03"
-    },
     "475_503": {
       "naam": "01",
-      "primaire_stad_id": 291
+      "primaire_stad_id": 329
     }
   },
   "_uitleg": "Hoofdconfiguratiebestand. Account-gegevens via GREPO_ACCOUNT secret.",
@@ -88,28 +88,28 @@
       }
     ]
   },
-  "opties": {
-    "dorp_overslaan_kans": 0.02,
-    "opslag_drempel_pct": 95,
-    "captcha_pauze_min": 45,
-    "extra_pauze_min_min": 5,
-    "_uitleg": "Alle instelbare parameters",
-    "sessie_minuten": 45,
-    "extra_pauze_max_min": 10,
-    "precheck_buffer_min": 3,
-    "extra_pauze_kans": 0.1,
-    "cooldown_snap_min": 4
+  "account": {
+    "_uitleg": "Wordt overschreven door GREPO_ACCOUNT secret.",
+    "world": "",
+    "player_id": 0,
+    "towns": []
   },
   "email": {
     "smtp_port": 587,
     "smtp_host": "smtp.gmail.com",
     "enabled": true
   },
-  "account": {
-    "_uitleg": "Wordt overschreven door GREPO_ACCOUNT secret.",
-    "world": "",
-    "player_id": 0,
-    "towns": []
+  "opties": {
+    "dorp_overslaan_kans": 0.02,
+    "opslag_drempel_pct": 95,
+    "captcha_pauze_min": 45,
+    "_uitleg": "Alle instelbare parameters",
+    "extra_pauze_min_min": 5,
+    "precheck_buffer_min": 3,
+    "sessie_minuten": 45,
+    "extra_pauze_max_min": 10,
+    "extra_pauze_kans": 0.1,
+    "cooldown_snap_min": 4
   },
   "town_meta": {
     "290": {
@@ -119,8 +119,8 @@
     },
     "291": {
       "note": "",
-      "role": "def",
-      "troops": "sea"
+      "troops": "sea",
+      "role": "def"
     },
     "329": {
       "note": "",
@@ -129,18 +129,18 @@
     },
     "408": {
       "note": "",
-      "role": "def",
-      "troops": "land"
+      "troops": "land",
+      "role": "def"
     },
     "802": {
       "note": "",
-      "role": "def",
-      "troops": "land"
+      "troops": "land",
+      "role": "def"
     },
     "1180": {
       "note": "",
-      "role": "def",
-      "troops": "land"
+      "troops": "land",
+      "role": "def"
     }
   }
 }
