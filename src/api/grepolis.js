@@ -93,7 +93,7 @@ class GrepolisAPI {
     );
 
     const html = res.data?.plain?.html ?? "";
-    // Parse hide data: gebruik balanced-brace parser om tweede JSON-arg te vinden
+    // Parse hide data: aangeroepen als .sendMessage('initializeResourcesCounter', resources, hides)
     function extractJSON(str, from) {
       let depth = 0, start = -1;
       for (let i = from; i < str.length; i++) {
@@ -103,19 +103,19 @@ class GrepolisAPI {
       }
       return null;
     }
-    const fnMatch = html.match(/initializeResourcesCounter\s*\(/);
+    // Zoek zowel directe aanroep als sendMessage-varianten
+    const fnMatch = html.match(/sendMessage\s*\(\s*['"]initializeResourcesCounter['"]\s*,/)
+                 || html.match(/initializeResourcesCounter\s*\(/);
     if (!fnMatch) {
-      // Log what's actually in the response to diagnose
       const hasIron = html.includes('iron_stored');
-      const hasInit = html.includes('initializeResourcesCounter');
-      const hasHide = html.includes('HidesOverview');
-      logger.warn(`[API] Geen grotten-data in response | iron_stored=${hasIron} | initializeResourcesCounter=${hasInit} | HidesOverview=${hasHide} | html-lengte=${html.length}`);
+      logger.warn(`[API] Geen grotten-data in response | iron_stored=${hasIron} | html-lengte=${html.length}`);
       return {};
     }
-    const first = extractJSON(html, fnMatch.index + fnMatch[0].length);
+    const searchFrom = fnMatch.index + fnMatch[0].length;
+    const first = extractJSON(html, searchFrom);
     const second = first ? extractJSON(html, first.end) : null;
     if (!second) {
-      logger.warn("[API] Geen grotten-data in response");
+      logger.warn("[API] Grotten: kon tweede JSON-argument niet parsen");
       return {};
     }
     try {
