@@ -105,7 +105,11 @@ class GrepolisAPI {
     }
     const fnMatch = html.match(/initializeResourcesCounter\s*\(/);
     if (!fnMatch) {
-      logger.warn("[API] Geen grotten-data in response");
+      // Log what's actually in the response to diagnose
+      const hasIron = html.includes('iron_stored');
+      const hasInit = html.includes('initializeResourcesCounter');
+      const hasHide = html.includes('HidesOverview');
+      logger.warn(`[API] Geen grotten-data in response | iron_stored=${hasIron} | initializeResourcesCounter=${hasInit} | HidesOverview=${hasHide} | html-lengte=${html.length}`);
       return {};
     }
     const first = extractJSON(html, fnMatch.index + fnMatch[0].length);
