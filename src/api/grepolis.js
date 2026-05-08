@@ -93,14 +93,29 @@ class GrepolisAPI {
     );
 
     const html = res.data?.plain?.html ?? "";
-    // Parse: initializeResourcesCounter(resources, hideData)
-    const m = html.match(/initializeResourcesCounter\s*\([^,]+,\s*(\{[^)]+\})\)/);
-    if (!m) {
+    // Parse hide data: gebruik balanced-brace parser om tweede JSON-arg te vinden
+    function extractJSON(str, from) {
+      let depth = 0, start = -1;
+      for (let i = from; i < str.length; i++) {
+        if (str[i] === '{') { if (start < 0) start = i; depth++; }
+        else if (str[i] === '}' && --depth === 0 && start >= 0)
+          return { json: str.slice(start, i + 1), end: i + 1 };
+      }
+      return null;
+    }
+    const fnMatch = html.match(/initializeResourcesCounter\s*\(/);
+    if (!fnMatch) {
+      logger.warn("[API] Geen grotten-data in response");
+      return {};
+    }
+    const first = extractJSON(html, fnMatch.index + fnMatch[0].length);
+    const second = first ? extractJSON(html, first.end) : null;
+    if (!second) {
       logger.warn("[API] Geen grotten-data in response");
       return {};
     }
     try {
-      const hideData = JSON.parse(m[1]);
+      const hideData = JSON.parse(second.json);
       const result = {};
       for (const [townId, d] of Object.entries(hideData)) {
         result[townId] = {
