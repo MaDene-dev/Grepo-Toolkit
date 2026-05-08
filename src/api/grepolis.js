@@ -190,11 +190,25 @@ class GrepolisAPI {
       };
 
       for (const key of BUILDINGS) {
-        result[townId].buildings[key] = buildings[key]?.level ?? 0;
+        result[townId].buildings[key] = {
+          level:      buildings[key]?.level      ?? 0,
+          next_level: buildings[key]?.next_level ?? buildings[key]?.level ?? 0,
+        };
       }
     }
 
     logger.info(`[API] Gebouwen geladen voor ${Object.keys(result).length} steden`);
+    // Debug: toon structuur van eerste stad
+    const sampleId = Object.keys(result)[0];
+    if (sampleId) {
+      const s = result[sampleId].buildings;
+      logger.info(`[API] Building sample ${result[sampleId].town_name}: main=${JSON.stringify(s.main)} farm=${JSON.stringify(s.farm)}`);
+      // Toon ook ruwe buildingData structuur
+      const raw = buildingData[sampleId];
+      logger.info(`[API] Raw buildingData keys voor ${sampleId}: ${Object.keys(raw||{}).slice(0,5).join(",")}`);
+      const rawMain = raw?.main;
+      logger.info(`[API] Raw main: ${JSON.stringify(rawMain)}`);
+    }
     return result;
   }
 
