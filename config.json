@@ -1,24 +1,50 @@
 {
+  "eilanden": {
+    "471_519": {
+      "naam": "Eiland 471_519",
+      "primaire_stad_id": 1618
+    },
+    "469_511": {
+      "naam": "03"
+    },
+    "461_508": {
+      "naam": "02",
+      "primaire_stad_id": 802
+    },
+    "_uitleg": "Welke stad grondstoffen ophaalt per eiland. Key = island_x_island_y",
+    "451_514": {
+      "naam": "Eiland 451_514",
+      "primaire_stad_id": 2207
+    },
+    "475_506": {
+      "naam": "04",
+      "primaire_stad_id": 476
+    },
+    "475_503": {
+      "naam": "01",
+      "primaire_stad_id": 329
+    }
+  },
   "intervals": {
     "A": {
       "jitter_minutes": 2,
-      "label": "10 min",
       "interval_minutes": 10,
+      "label": "10 min",
       "time_option_booty": 600,
       "time_option_base": 300
     },
     "_uitleg": "A=10min/5min | B=40min/20min | C=3u/1u30 | D=8u/4u (booty/basis)",
     "B": {
       "jitter_minutes": 5,
-      "interval_minutes": 40,
       "label": "40 min",
+      "interval_minutes": 40,
       "time_option_booty": 2400,
       "time_option_base": 1200
     },
     "C": {
       "jitter_minutes": 10,
-      "label": "3u",
       "interval_minutes": 180,
+      "label": "3u",
       "time_option_booty": 10800,
       "time_option_base": 5400
     },
@@ -28,32 +54,6 @@
       "label": "8u",
       "time_option_booty": 28800,
       "time_option_base": 14400
-    }
-  },
-  "eilanden": {
-    "471_519": {
-      "naam": "Eiland 471_519",
-      "primaire_stad_id": 1618
-    },
-    "461_508": {
-      "naam": "02",
-      "primaire_stad_id": 802
-    },
-    "469_511": {
-      "naam": "03"
-    },
-    "_uitleg": "Welke stad grondstoffen ophaalt per eiland. Key = island_x_island_y",
-    "451_514": {
-      "naam": "Eiland 451_514",
-      "primaire_stad_id": 2207
-    },
-    "475_506": {
-      "naam": "04",
-      "primaire_stad_id": 408
-    },
-    "475_503": {
-      "naam": "01",
-      "primaire_stad_id": 329
     }
   },
   "_uitleg": "Hoofdconfiguratiebestand. Account-gegevens via GREPO_ACCOUNT secret.",
@@ -97,15 +97,20 @@
       }
     ]
   },
+  "email": {
+    "smtp_port": 587,
+    "smtp_host": "smtp.gmail.com",
+    "enabled": true
+  },
   "opties": {
     "dorp_overslaan_kans": 0.02,
-    "captcha_pauze_min": 45,
     "opslag_drempel_pct": 95,
+    "captcha_pauze_min": 45,
     "_uitleg": "Alle instelbare parameters",
     "extra_pauze_min_min": 5,
     "extra_pauze_max_min": 10,
-    "precheck_buffer_min": 3,
     "sessie_minuten": 45,
+    "precheck_buffer_min": 3,
     "extra_pauze_kans": 0.1,
     "cooldown_snap_min": 4
   },
@@ -114,11 +119,6 @@
     "player_id": 0,
     "world": "",
     "towns": []
-  },
-  "email": {
-    "smtp_port": 587,
-    "smtp_host": "smtp.gmail.com",
-    "enabled": true
   },
   "town_meta": {
     "290": {
