@@ -4,12 +4,12 @@
       "naam": "Eiland 471_519",
       "primaire_stad_id": 1618
     },
-    "469_511": {
-      "naam": "03"
-    },
     "461_508": {
       "naam": "02",
       "primaire_stad_id": 802
+    },
+    "469_511": {
+      "naam": "03"
     },
     "_uitleg": "Welke stad grondstoffen ophaalt per eiland. Key = island_x_island_y",
     "451_514": {
@@ -18,18 +18,18 @@
     },
     "475_506": {
       "naam": "04",
-      "primaire_stad_id": 408
+      "primaire_stad_id": 476
     },
     "475_503": {
       "naam": "01",
-      "primaire_stad_id": 329
+      "primaire_stad_id": 290
     }
   },
   "intervals": {
     "A": {
       "jitter_minutes": 2,
-      "label": "10 min",
       "interval_minutes": 10,
+      "label": "10 min",
       "time_option_booty": 600,
       "time_option_base": 300
     },
@@ -50,8 +50,8 @@
     },
     "D": {
       "jitter_minutes": 20,
-      "interval_minutes": 480,
       "label": "8u",
+      "interval_minutes": 480,
       "time_option_booty": 28800,
       "time_option_base": 14400
     }
@@ -97,18 +97,6 @@
       }
     ]
   },
-  "opties": {
-    "dorp_overslaan_kans": 0.02,
-    "opslag_drempel_pct": 95,
-    "captcha_pauze_min": 45,
-    "extra_pauze_min_min": 5,
-    "_uitleg": "Alle instelbare parameters",
-    "sessie_minuten": 45,
-    "precheck_buffer_min": 3,
-    "extra_pauze_max_min": 10,
-    "extra_pauze_kans": 0.1,
-    "cooldown_snap_min": 4
-  },
   "email": {
     "smtp_port": 587,
     "smtp_host": "smtp.gmail.com",
@@ -119,6 +107,18 @@
     "world": "",
     "player_id": 0,
     "towns": []
+  },
+  "opties": {
+    "dorp_overslaan_kans": 0.02,
+    "captcha_pauze_min": 45,
+    "opslag_drempel_pct": 95,
+    "_uitleg": "Alle instelbare parameters",
+    "extra_pauze_min_min": 5,
+    "sessie_minuten": 45,
+    "precheck_buffer_min": 3,
+    "extra_pauze_max_min": 10,
+    "extra_pauze_kans": 0.1,
+    "cooldown_snap_min": 4
   },
   "town_meta": {
     "290": {
