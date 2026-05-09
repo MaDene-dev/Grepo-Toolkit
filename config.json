@@ -1,5 +1,16 @@
 {
   "eilanden": {
+    "471_519": {
+      "naam": "Eiland 471_519",
+      "primaire_stad_id": 1618
+    },
+    "469_511": {
+      "naam": "03"
+    },
+    "461_508": {
+      "naam": "02",
+      "primaire_stad_id": 802
+    },
     "_uitleg": "Welke stad grondstoffen ophaalt per eiland. Key = island_x_island_y",
     "451_514": {
       "naam": "Eiland 451_514",
@@ -9,20 +20,9 @@
       "naam": "04",
       "primaire_stad_id": 476
     },
-    "469_511": {
-      "naam": "03"
-    },
-    "461_508": {
-      "naam": "02",
-      "primaire_stad_id": 802
-    },
     "475_503": {
       "naam": "01",
       "primaire_stad_id": 329
-    },
-    "471_519": {
-      "naam": "Eiland 471_519",
-      "primaire_stad_id": 1618
     }
   },
   "intervals": {
@@ -97,28 +97,28 @@
       }
     ]
   },
-  "account": {
-    "_uitleg": "Wordt overschreven door GREPO_ACCOUNT secret.",
-    "player_id": 0,
-    "world": "",
-    "towns": []
-  },
-  "email": {
-    "smtp_port": 587,
-    "smtp_host": "smtp.gmail.com",
-    "enabled": true
-  },
   "opties": {
     "dorp_overslaan_kans": 0.02,
     "opslag_drempel_pct": 95,
     "captcha_pauze_min": 45,
     "extra_pauze_min_min": 5,
     "_uitleg": "Alle instelbare parameters",
-    "precheck_buffer_min": 3,
     "sessie_minuten": 45,
+    "precheck_buffer_min": 3,
     "extra_pauze_max_min": 10,
     "extra_pauze_kans": 0.1,
     "cooldown_snap_min": 4
+  },
+  "email": {
+    "smtp_port": 587,
+    "smtp_host": "smtp.gmail.com",
+    "enabled": true
+  },
+  "account": {
+    "_uitleg": "Wordt overschreven door GREPO_ACCOUNT secret.",
+    "world": "",
+    "player_id": 0,
+    "towns": []
   },
   "town_meta": {
     "290": {
