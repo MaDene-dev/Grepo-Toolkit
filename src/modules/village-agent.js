@@ -65,6 +65,10 @@ class VillageAgent {
 
   // ── Eiland filtering ──────────────────────────────────────
   _filterTownsPerEiland(towns) {
+    const opties      = this.config.opties || {};
+    const balancerAan = opties.balancer !== false; // default aan
+    const drempel     = opties.balancer_drempel_pct ?? 80;
+
     // Groepeer per eiland
     const eilandMap = {};
     for (const town of towns) {
@@ -73,27 +77,56 @@ class VillageAgent {
       eilandMap[key].push(town);
     }
 
+    // Bereken hoeveel grondstoffen boven drempel zitten
+    const fillPct = (t) => {
+      const cap = t.storage_volume || 1;
+      return [
+        Math.round((t.wood  || 0) / cap * 100),
+        Math.round((t.stone || 0) / cap * 100),
+        Math.round((t.iron  || 0) / cap * 100),
+      ];
+    };
+
+    const boven = (t) => fillPct(t).filter(p => p >= drempel).length;
+
     const gefilterd = [];
     for (const [key, eilandTowns] of Object.entries(eilandMap)) {
       const eilandConfig = this.eilanden[key];
+
+      // Bepaal primaire stad
+      let primair = null;
       if (eilandConfig?.primaire_stad_id) {
-        const primair = eilandTowns.find(t => t.id === eilandConfig.primaire_stad_id);
-        if (primair) {
-          gefilterd.push(primair);
-        } else {
-          // Geconfigureerde stad niet gevonden → gebruik eerste als fallback
-          gefilterd.push(eilandTowns[0]);
-          logger.warn(`[Village Agent] Eiland ${key}: primaire stad ${eilandConfig.primaire_stad_id} niet gevonden, gebruik ${eilandTowns[0].name}`);
+        primair = eilandTowns.find(t => t.id === eilandConfig.primaire_stad_id);
+        if (!primair) {
+          logger.warn(`[Village Agent] Eiland ${key}: primaire stad ${eilandConfig.primaire_stad_id} niet gevonden`);
+          primair = eilandTowns[0];
         }
       } else {
-        // Eiland niet geconfigureerd → gebruik eerste stad als default
-        gefilterd.push(eilandTowns[0]);
-        // Waarschuw enkel als er meerdere steden zijn (dan is een keuze relevant)
-        if (eilandTowns.length > 1) {
-          const namen = eilandTowns.map(t => t.name).join(", ");
-          logger.info(`[Village Agent] Eiland ${key}: meerdere steden, geen config → default: ${eilandTowns[0].name} | keuze: ${namen}`);
+        primair = eilandTowns[0];
+        if (eilandTowns.length > 1)
+          logger.info(`[Village Agent] Eiland ${key}: geen config → default ${primair.name}`);
+      }
+
+      if (balancerAan && eilandTowns.length > 1) {
+        const primairBoven = boven(primair);
+        if (primairBoven >= 2) {
+          const maxFill = (t) => Math.max(...fillPct(t));
+          // Sorteer: minst aantal boven drempel, dan laagste maximum
+          const alternatieven = eilandTowns
+            .filter(t => t.id !== primair.id)
+            .sort((a, b) => boven(a) - boven(b) || maxFill(a) - maxFill(b));
+          const best = alternatieven[0];
+          // Wissel als alternatief beter is (minder vol) OF als alles vol zit toch beste kiezen
+          if (best && (boven(best) < primairBoven || maxFill(best) < maxFill(primair))) {
+            const pcts = fillPct(primair);
+            logger.info(`[Village Agent] 🔄 Balancer ${key}: ${primair.name} (${pcts.join("/")}%) → ${best.name} (${fillPct(best).join("/")}%)`);
+            gefilterd.push(best);
+            continue;
+          }
         }
       }
+
+      gefilterd.push(primair);
     }
     return gefilterd;
   }
@@ -196,10 +229,20 @@ class VillageAgent {
         try {
           const buildings = await this.api.getBuildingOverview();
           await this.stats.saveBuildings(buildings);
+        } catch (e) {
+          logger.warn(`[Village Agent] Gebouwen ophalen mislukt: ${e.message}`);
+        }
+        try {
+          const gods = await this.api.getGodsOverview();
+          await this.stats.saveGods(gods);
+        } catch (e) {
+          logger.warn(`[Village Agent] Goden ophalen mislukt: ${e.message}`);
+        }
+        try {
           const hides = await this.api.getHidesOverview();
           await this.stats.saveHides(hides);
         } catch (e) {
-          logger.warn(`[Village Agent] Gebouwen ophalen mislukt: ${e.message}`);
+          logger.warn(`[Village Agent] Grotten ophalen mislukt: ${e.message}`);
         }
       }
       const towns       = this._filterTownsPerEiland(allTowns);
