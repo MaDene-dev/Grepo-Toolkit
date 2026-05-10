@@ -77,6 +77,66 @@ class GrepolisAPI {
     this._loadsData = null;
   }
 
+  async getGodsOverview() {
+    const towns = await this.getTowns();
+    if (!towns?.length) return {};
+
+    const activeTown = towns[0];
+    const params = new URLSearchParams({
+      town_id: activeTown.id,
+      action:  "gods_overview",
+      h:       this.session.csrfToken,
+      json:    JSON.stringify({ town_id: activeTown.id, nl_init: true }),
+      _:       Date.now(),
+    });
+    const res = await this.session.client.get(
+      `${this.session.baseUrl}/game/town_overviews?${params}`,
+      { headers: { ...this.session._headers(), "X-Requested-With": "XMLHttpRequest", Accept: "application/json, */*" } }
+    );
+
+    const html = res.data?.plain?.html ?? "";
+    const result = {};
+
+    // Patroon 1: sendMessage met god-data (per stad)
+    const smMatch = html.match(/sendMessage\s*\(\s*['"]([^'"]*god[^'"]*)['"]/i);
+    if (smMatch) logger.info(`[API] Gods sendMessage patroon: ${smMatch[1]}`);
+
+    // Patroon 2: zoek god-naam per town_id in de HTML
+    // <a href="#eyJ...">stadnaam</a> ... god_name
+    const townGodRe = /id['"]\s*:\s*(\d+)[^}]*god['"]\s*:\s*['"]([a-z]+)['"]/gi;
+    let m;
+    while ((m = townGodRe.exec(html)) !== null) {
+      result[m[1]] = m[2];
+    }
+
+    // Patroon 3: JS variabele met town_id → god mapping
+    const varRe = /var\s+\w*god\w*\s*=\s*(\{[^;]+\})/i;
+    const varMatch = html.match(varRe);
+    if (varMatch) {
+      try {
+        const godData = JSON.parse(varMatch[1]);
+        for (const [tid, gd] of Object.entries(godData)) {
+          if (gd?.god || typeof gd === "string") result[tid] = gd?.god ?? gd;
+        }
+      } catch (_) {}
+    }
+
+    // Patroon 4: per stad <div id="ov_town_329"> met god-class
+    const divRe = /id="ov_town_(\d+)"[\s\S]{0,2000}?class="([a-z]+)_temple/g;
+    while ((m = divRe.exec(html)) !== null) {
+      if (!result[m[1]]) result[m[1]] = m[2];
+    }
+
+    if (Object.keys(result).length > 0) {
+      logger.info(`[API] Goden geladen: ${Object.entries(result).map(([id,g])=>`${id}:${g}`).join(", ")}`);
+    } else {
+      // Debug: log eerste 300 chars van JS
+      const scriptMatch = html.match(/<script[\s\S]*?>([\s\S]{0,500})/);
+      if (scriptMatch) logger.info(`[API] Gods HTML sample: ${scriptMatch[1].slice(0,300)}`);
+    }
+    return result; // { townId: godName }
+  }
+
   async getHidesOverview() {
     const towns = await this.getTowns();
     if (!towns?.length) return {};
