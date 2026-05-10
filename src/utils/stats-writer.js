@@ -103,6 +103,11 @@ class StatsWriter {
   }
 
   // ── Grotten opslaan ─────────────────────────────────────────
+  async saveGods(godData) {
+    if (!godData || Object.keys(godData).length === 0) return;
+    await this._post("saveGods", { world: this.world, gods: godData });
+  }
+
   async saveHides(hideData) {
     if (!hideData || Object.keys(hideData).length === 0) return;
     await this._post("saveHides", { world: this.world, hides: hideData });
