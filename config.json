@@ -28,16 +28,16 @@
   "intervals": {
     "A": {
       "jitter_minutes": 2,
-      "interval_minutes": 10,
       "label": "10 min",
+      "interval_minutes": 10,
       "time_option_booty": 600,
       "time_option_base": 300
     },
     "_uitleg": "A=10min/5min | B=40min/20min | C=3u/1u30 | D=8u/4u (booty/basis)",
     "B": {
       "jitter_minutes": 5,
-      "interval_minutes": 40,
       "label": "40 min",
+      "interval_minutes": 40,
       "time_option_booty": 2400,
       "time_option_base": 1200
     },
@@ -97,26 +97,26 @@
       }
     ]
   },
-  "email": {
-    "smtp_port": 587,
-    "smtp_host": "smtp.gmail.com",
-    "enabled": true
-  },
   "account": {
     "_uitleg": "Wordt overschreven door GREPO_ACCOUNT secret.",
     "player_id": 0,
     "world": "",
     "towns": []
   },
+  "email": {
+    "smtp_port": 587,
+    "smtp_host": "smtp.gmail.com",
+    "enabled": true
+  },
   "opties": {
     "dorp_overslaan_kans": 0.02,
-    "opslag_drempel_pct": 95,
     "captcha_pauze_min": 45,
+    "opslag_drempel_pct": 95,
     "extra_pauze_min_min": 5,
     "_uitleg": "Alle instelbare parameters",
-    "precheck_buffer_min": 3,
-    "extra_pauze_max_min": 10,
     "sessie_minuten": 45,
+    "extra_pauze_max_min": 10,
+    "precheck_buffer_min": 3,
     "extra_pauze_kans": 0.1,
     "cooldown_snap_min": 4
   },
@@ -150,6 +150,11 @@
       "note": "",
       "troops": "land",
       "role": "def"
+    },
+    "1618": {
+      "note": "",
+      "role": "def",
+      "troops": "land"
     }
   }
 }
