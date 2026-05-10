@@ -230,19 +230,19 @@ class VillageAgent {
           const buildings = await this.api.getBuildingOverview();
           await this.stats.saveBuildings(buildings);
         } catch (e) {
-          logger.warn(`[Village Agent] Gebouwen ophalen mislukt: ${e.message}`);
+          logger.warn(`[VA] Gebouwen: ${e.message}`);
         }
         try {
           const gods = await this.api.getGodsOverview();
           await this.stats.saveGods(gods);
         } catch (e) {
-          logger.warn(`[Village Agent] Goden ophalen mislukt: ${e.message}`);
+          logger.warn(`[VA] Goden: ${e.message}`);
         }
         try {
           const hides = await this.api.getHidesOverview();
           await this.stats.saveHides(hides);
         } catch (e) {
-          logger.warn(`[Village Agent] Grotten ophalen mislukt: ${e.message}`);
+          logger.warn(`[VA] Grotten: ${e.message}`);
         }
       }
       const towns       = this._filterTownsPerEiland(allTowns);
@@ -303,8 +303,7 @@ class VillageAgent {
     }
 
     if (farms > 0) {
-      logger.info(`[Village Agent] ✓ Ronde #${this.roundNum} | ${farms} dorpen | 🪵${wood} 🪨${stone} 🪙${silver} | ${dur}s`);
-      logger.info(`[Village Agent] Cumulatief | 🪵${this.totals.wood} 🪨${this.totals.stone} 🪙${this.totals.silver} | ${this.roundNum} rondes`);
+      logger.info(`[Village Agent] ✓ #${this.roundNum} | ${farms} drp | 🪵${wood} 🪨${stone} 🪙${silver} | cum: 🪵${this.totals.wood} 🪨${this.totals.stone} 🪙${this.totals.silver}`);
     } else {
       logger.info(`[Village Agent] Ronde #${this.roundNum} | niets te halen | ${dur}s`);
     }
@@ -517,7 +516,7 @@ class VillageAgent {
         const wNS = pNS >= 90 ? "⚠️" : pNS >= 80 ? "!" : "";
         const wNI = pNI >= 90 ? "⚠️" : pNI >= 80 ? "!" : "";
         const fmt = n => Math.round(n).toLocaleString("nl-BE");
-        logger.info(`[Village Agent]   ${town.name} (${ready.length} dorpen): na 🪵${pNW}%${wNW} 🪨${pNS}%${wNS} 🪙${pNI}%${wNI} (${fmt(tdNa.wood)} / ${fmt(tdNa.stone)} / ${fmt(tdNa.iron)} | cap: ${fmt(cap)})`);
+        logger.info(`[VA] ${town.name}: 🪵${pNW}% 🪨${pNS}% 🪙${pNI}%`);
 
         townSnapshots.push({
           town_id: town.id, town_name: town.name,
