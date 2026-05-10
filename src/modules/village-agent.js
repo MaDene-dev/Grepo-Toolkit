@@ -434,7 +434,8 @@ class VillageAgent {
         if (i < towns.length - 1) await this._sleep(400 + Math.random() * 400);
       } catch (err) {
         if (err.message === "SESSION_EXPIRED") throw err;
-        logger.warn(`[Village Agent]   ${town.name} overview fout: ${err.message}`);
+        const emsg=err.message||err.code||(err.response&&err.response.status)||(typeof err==='string'?err:JSON.stringify(err));
+        logger.warn(`[Village Agent]   ${town.name} overview fout: ${emsg}`);
       }
     }
 
@@ -533,7 +534,8 @@ class VillageAgent {
       };
     } catch (err) {
       if (err.message === "SESSION_EXPIRED") throw err;
-      logger.warn(`[Village Agent]   Claim fout: ${err.message}`);
+      const cerr=err.message||err.code||(err.response&&err.response.status)||(typeof err==='string'?err:JSON.stringify(err));
+      logger.warn(`[Village Agent]   Claim fout: ${cerr}`);
       return { wood:0, stone:0, iron:0, farms:0, townSnapshots:[] };
     }
   }
