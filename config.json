@@ -86,6 +86,22 @@
     "461_508": {
       "naam": "Polo's eiland",
       "primaire_stad_id": 802
+    },
+    "451_514": {
+      "naam": "Eiland 451_514",
+      "primaire_stad_id": 2207
+    },
+    "475_506": {
+      "naam": "Eiland 475_506",
+      "primaire_stad_id": 408
+    },
+    "469_511": {
+      "naam": "Eiland 469_511",
+      "primaire_stad_id": 1180
+    },
+    "471_519": {
+      "naam": "Eiland 471_519",
+      "primaire_stad_id": 1618
     }
   },
   "opties": {
