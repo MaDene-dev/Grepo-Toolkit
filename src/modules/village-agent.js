@@ -233,7 +233,12 @@ class VillageAgent {
           logger.warn(`[VA] Gebouwen: ${e.message}`);
         }
         try {
-          const gods = await this.api.getGodsOverview();
+          const recruit = await this.api.getRecruitOverview();
+          await this.stats.saveTroops(recruit);
+        } catch (e) {
+          logger.warn(`[VA] Troepen: ${e.message}`);
+        }
+        try {
           await this.stats.saveGods(gods);
         } catch (e) {
           logger.warn(`[VA] Goden: ${e.message}`);
