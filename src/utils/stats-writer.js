@@ -103,6 +103,11 @@ class StatsWriter {
   }
 
   // ── Grotten opslaan ─────────────────────────────────────────
+  async saveTroops(recruitData) {
+    if (!recruitData) return;
+    await this._post("saveTroops", { world: this.world, ...recruitData });
+  }
+
   async saveGods(godData) {
     if (!godData || Object.keys(godData).length === 0) return;
     await this._post("saveGods", { world: this.world, gods: godData });
