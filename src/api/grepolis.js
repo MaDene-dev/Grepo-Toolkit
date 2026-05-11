@@ -75,6 +75,48 @@ class GrepolisAPI {
     this._loadsData = null;
   }
 
+  async getRecruitOverview() {
+    const towns = await this.getTowns();
+    if (!towns?.length) return null;
+    const activeTown = towns[0];
+    const params = new URLSearchParams({
+      town_id: activeTown.id,
+      action:  "recruit_overview",
+      h:       this.session.csrfToken,
+      json:    JSON.stringify({ town_id: activeTown.id, nl_init: true }),
+      _:       Date.now(),
+    });
+    const res = await this.session.client.get(
+      `${this.session.baseUrl}/game/town_overviews?${params}`,
+      { headers: { ...this.session._headers(), "X-Requested-With": "XMLHttpRequest", Accept: "application/json, */*" } }
+    );
+    const data = res.data?.json?.data;
+    if (!data?.towns) return null;
+
+    // Transformeer naar town_id-gebaseerd object
+    const troops = {};
+    for (const t of data.towns) {
+      const units = {};
+      for (const u of (t.units || [])) {
+        if (u.count !== undefined || u.total !== undefined) {
+          units[u.id] = { count: u.count ?? 0, total: u.total ?? 0, all: u.all ?? 0 };
+        }
+      }
+      troops[String(t.id)] = {
+        name: t.name, god: t.god,
+        free_population: t.free_population ?? 0,
+        storage_volume:  t.storage_volume  ?? 0,
+        units,
+        orders: { barracks: t.orders?.barracks ?? [], docks: t.orders?.docks ?? [] },
+      };
+    }
+    const summary = Object.values(troops).map(t =>
+      `${t.name}: ${Object.values(t.units).filter(u => u.count > 0).length} soorten`
+    ).join(", ");
+    logger.info(`[API] Troepen: ${summary}`);
+    return { troops, favor: data.favor ?? {} };
+  }
+
   async getGodsOverview() {
     const towns = await this.getTowns();
     if (!towns?.length) return {};
