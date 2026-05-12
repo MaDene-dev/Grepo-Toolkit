@@ -153,6 +153,11 @@ class StatsWriter {
     if (!snapshots?.length) return;
     await this._post("saveTownSnapshots", { snapshots });
   }
+  // ── Trade log opslaan ─────────────────────────────────────
+  async saveTradeLog(logData) {
+    await this._post("saveTradeLog", { world: this.world, ...logData });
+  }
+
 }
 
 module.exports = StatsWriter;
