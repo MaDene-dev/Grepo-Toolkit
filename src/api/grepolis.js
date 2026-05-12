@@ -528,6 +528,44 @@ class GrepolisAPI {
     if (data?.error) logger.warn(`[API] claim_loads fout: ${data.error}`);
     return null;
   }
+
+  // ── Trade overview ────────────────────────────────────────
+  async getTradeOverview() {
+    const towns = await this.getTowns();
+    if (!towns?.length) return null;
+    const t = towns[0];
+    const params = new URLSearchParams({
+      town_id: t.id, action: "trade_overview", h: this.session.csrfToken,
+      json: JSON.stringify({ town_id: t.id, nl_init: true }), _: Date.now(),
+    });
+    const res = await this.session.client.get(
+      `${this.session.baseUrl}/game/town_overviews?${params}`,
+      { headers: { ...this.session._headers(), "X-Requested-With": "XMLHttpRequest", Accept: "application/json, */*" } }
+    );
+    const data = res.data?.json;
+    if (!data?.towns?.length) return null;
+    return { activeTownId: t.id, towns: data.towns.map(tw => ({ ...tw, cap: tw.cap ?? 0 })) };
+  }
+
+  // ── Grondstoffen versturen tussen eigen steden ────────────
+  async tradeBetweenTowns(activeTownId, fromId, toId, wood, stone, iron) {
+    const params = new URLSearchParams({
+      town_id: activeTownId, action: "trade_between_own_town", h: this.session.csrfToken,
+    });
+    const body = new URLSearchParams({
+      origin_town_id: String(fromId), target_town_id: String(toId),
+      wood: String(wood || 0), stone: String(stone || 0), iron: String(iron || 0),
+    });
+    const res = await this.session.client.post(
+      `${this.session.baseUrl}/game/town_overviews?${params}`,
+      body.toString(),
+      { headers: { ...this.session._headers(), "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "XMLHttpRequest" } }
+    );
+    const data = res.data?.json;
+    if (!data?.success) throw new Error(data?.error ?? "Trade mislukt");
+    const mov = data.movements?.[0];
+    return { success: true, arrival: mov?.arrival ?? null, movementId: data.new_trade_movement };
+  }
 }
 
 module.exports = GrepolisAPI;
