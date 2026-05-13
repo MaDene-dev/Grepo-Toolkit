@@ -1,173 +1,156 @@
 {
-  "eilanden": {
-    "471_519": {
-      "naam": "Eiland 471_519",
-      "primaire_stad_id": 1618
-    },
-    "461_508": {
-      "naam": "Polo's eiland",
-      "primaire_stad_id": 802
-    },
-    "469_511": {
-      "naam": "Eiland 469_511",
-      "primaire_stad_id": 1180
-    },
-    "_uitleg": "Welke stad grondstoffen ophaalt per eiland. Key = island_x_island_y",
-    "451_514": {
-      "naam": "Eiland 451_514",
-      "primaire_stad_id": 2207
-    },
-    "475_506": {
-      "naam": "Eiland 475_506",
-      "primaire_stad_id": 408
-    },
-    "475_503": {
-      "naam": "Marco's eiland",
-      "primaire_stad_id": 329
-    }
+  "_uitleg": "Hoofdconfiguratiebestand. Account-gegevens via GREPO_ACCOUNT secret.",
+  "account": {
+    "_uitleg": "Wordt overschreven door GREPO_ACCOUNT secret.",
+    "world": "",
+    "player_id": 0,
+    "towns": []
   },
   "intervals": {
-    "A": {
-      "jitter_minutes": 2,
-      "interval_minutes": 10,
-      "label": "10 min",
-      "time_option_booty": 600,
-      "time_option_base": 300
-    },
     "_uitleg": "A=10min/5min | B=40min/20min | C=3u/1u30 | D=8u/4u (booty/basis)",
+    "A": {
+      "time_option_booty": 600,
+      "time_option_base": 300,
+      "label": "10 min",
+      "interval_minutes": 10,
+      "jitter_minutes": 2
+    },
     "B": {
-      "jitter_minutes": 5,
-      "interval_minutes": 40,
-      "label": "40 min",
       "time_option_booty": 2400,
-      "time_option_base": 1200
+      "time_option_base": 1200,
+      "label": "40 min",
+      "interval_minutes": 40,
+      "jitter_minutes": 5
     },
     "C": {
-      "jitter_minutes": 10,
+      "time_option_booty": 10800,
+      "time_option_base": 5400,
       "label": "3u",
       "interval_minutes": 180,
-      "time_option_booty": 10800,
-      "time_option_base": 5400
+      "jitter_minutes": 10
     },
     "D": {
-      "jitter_minutes": 20,
+      "time_option_booty": 28800,
+      "time_option_base": 14400,
       "label": "8u",
       "interval_minutes": 480,
-      "time_option_booty": 28800,
-      "time_option_base": 14400
+      "jitter_minutes": 20
     }
   },
-  "resource_balancer": {
-    "preview": false,
-    "stadsfeest": {
-      "aantal": 1,
-      "enabled": false,
-      "doel_stad_id": null
-    },
-    "modus": "balans",
-    "balans": {
-      "max_transfers_per_ronde": 3,
-      "tekort_drempel": 30,
-      "min_transfer": 1000,
-      "surplus_drempel": 85
-    },
-    "enabled": true
-  },
-  "unit_cats": {
-    "attack_ship": "off",
-    "sea_monster": "both",
-    "siren": "def",
-    "harpy": "off",
-    "medusa": "both",
-    "zyklop": "both",
-    "rider": "off",
-    "pegasus": "def",
-    "calydonian_boar": "def",
-    "catapult": "off",
-    "godsent": "both",
-    "spartoi": "off",
-    "cerberus": "def",
-    "demolition_ship": "off",
-    "griffin": "off",
-    "slinger": "off",
-    "manticore": "off",
-    "bireme": "def",
-    "fury": "off",
-    "big_transporter": "none",
-    "small_transporter": "none",
-    "colonize_ship": "none",
-    "trireme": "both",
-    "centaur": "def",
-    "sword": "both",
-    "ladon": "off",
-    "minotaur": "both",
-    "chariot": "off",
-    "archer": "def",
-    "hoplite": "def",
-    "satyr": "off"
-  },
-  "_uitleg": "Hoofdconfiguratiebestand. Account-gegevens via GREPO_ACCOUNT secret.",
   "dagschema": {
     "_uitleg": "Wanneer de bot actief is. Tijden zijn Belgisch.",
     "blokken": [
       {
-        "tot": "06:30",
+        "actief": false,
         "van": "00:00",
+        "tot": "06:30",
         "interval": "D",
-        "_opmerking": "Nacht",
-        "actief": false
+        "_opmerking": "Nacht"
       },
       {
-        "tot": "12:00",
+        "actief": true,
         "van": "06:30",
+        "tot": "12:00",
         "interval": "A",
-        "_opmerking": "Ochtend",
-        "actief": true
+        "_opmerking": "Ochtend"
       },
       {
-        "tot": "17:30",
+        "actief": true,
         "van": "12:00",
+        "tot": "17:30",
         "interval": "A",
-        "_opmerking": "Middag",
-        "actief": true
+        "_opmerking": "Middag"
       },
       {
-        "tot": "23:00",
+        "actief": true,
         "van": "17:30",
+        "tot": "23:00",
         "interval": "A",
-        "_opmerking": "Avond",
-        "actief": true
+        "_opmerking": "Avond"
       },
       {
-        "tot": "24:00",
+        "actief": false,
         "van": "23:00",
+        "tot": "24:00",
         "interval": "D",
-        "_opmerking": "Laat",
-        "actief": false
+        "_opmerking": "Laat"
       }
     ]
   },
+  "eilanden": {
+    "_uitleg": "Welke stad grondstoffen ophaalt per eiland. Key = island_x_island_y",
+    "475_503": {
+      "naam": "Marco's eiland",
+      "primaire_stad_id": 329
+    },
+    "461_508": {
+      "naam": "Polo's eiland",
+      "primaire_stad_id": 802
+    }
+  },
   "opties": {
-    "dorp_overslaan_kans": 0.02,
-    "opslag_drempel_pct": 95,
-    "captcha_pauze_min": 45,
     "_uitleg": "Alle instelbare parameters",
+    "extra_pauze_kans": 0.1,
     "extra_pauze_min_min": 5,
     "extra_pauze_max_min": 10,
-    "precheck_buffer_min": 3,
+    "dorp_overslaan_kans": 0.02,
+    "opslag_drempel_pct": 95,
+    "cooldown_snap_min": 4,
     "sessie_minuten": 45,
-    "extra_pauze_kans": 0.1,
-    "cooldown_snap_min": 4
+    "precheck_buffer_min": 3,
+    "captcha_pauze_min": 45
   },
   "email": {
-    "smtp_port": 587,
+    "enabled": true,
     "smtp_host": "smtp.gmail.com",
-    "enabled": true
+    "smtp_port": 587
   },
-  "account": {
-    "_uitleg": "Wordt overschreven door GREPO_ACCOUNT secret.",
-    "player_id": 0,
-    "world": "",
-    "towns": []
+  "unit_cats": {
+    "sword": "both",
+    "slinger": "off",
+    "archer": "def",
+    "hoplite": "def",
+    "rider": "off",
+    "chariot": "off",
+    "catapult": "off",
+    "godsent": "both",
+    "manticore": "off",
+    "minotaur": "both",
+    "zyklop": "both",
+    "sea_monster": "both",
+    "harpy": "off",
+    "medusa": "both",
+    "centaur": "def",
+    "pegasus": "def",
+    "cerberus": "def",
+    "fury": "off",
+    "griffin": "off",
+    "calydonian_boar": "def",
+    "siren": "def",
+    "satyr": "off",
+    "spartoi": "off",
+    "ladon": "off",
+    "big_transporter": "none",
+    "bireme": "def",
+    "attack_ship": "off",
+    "demolition_ship": "off",
+    "small_transporter": "none",
+    "trireme": "both",
+    "colonize_ship": "none"
+  },
+  "resource_balancer": {
+    "enabled": false,
+    "preview": true,
+    "modus": "balans",
+    "balans": {
+      "surplus_drempel": 85,
+      "tekort_drempel": 30,
+      "min_transfer": 1000
+    },
+    "stadsfeest": {
+      "enabled": false,
+      "doel_stad_id": null,
+      "aantal": 1
+    }
   }
 }
