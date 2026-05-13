@@ -544,28 +544,36 @@ class GrepolisAPI {
     );
     const data = res.data?.json;
     if (!data?.towns?.length) return null;
-    return { activeTownId: t.id, towns: data.towns.map(tw => ({ ...tw, cap: tw.cap ?? 0 })) };
+    // t_token is de "actieve" context-stad die Grepolis verwacht in trade POST calls
+    const activeTownId = data.t_token ?? t.id;
+    return { activeTownId, towns: data.towns.map(tw => ({ ...tw, cap: tw.cap ?? 0 })) };
   }
 
   // ── Grondstoffen versturen tussen eigen steden ────────────
   async tradeBetweenTowns(activeTownId, fromId, toId, wood, stone, iron) {
-    // town_id in URL = de verzendende stad (origin), niet zomaar de actieve stad
     const params = new URLSearchParams({
-      town_id: fromId, action: "trade_between_own_town", h: this.session.csrfToken,
+      town_id: activeTownId, action: "trade_between_own_town", h: this.session.csrfToken,
     });
-    const body = new URLSearchParams({
-      origin_town_id: String(fromId), target_town_id: String(toId),
-      wood: String(wood || 0), stone: String(stone || 0), iron: String(iron || 0),
+    // Grepolis verwacht een JSON-object in een "json" form-parameter (zoals alle andere calls)
+    // Veldnamen: "from" en "to" (niet origin_town_id/target_town_id)
+    const jsonPayload = JSON.stringify({
+      from: fromId, to: toId,
+      wood: wood || 0, stone: stone || 0, iron: iron || 0,
+      town_id: activeTownId, nl_init: true,
     });
+    const body = new URLSearchParams({ json: jsonPayload });
+
+    logger.info(`[API] Trade POST: ${activeTownId} context | ${fromId}→${toId} | 🪵${wood} 🪨${stone} 🪙${iron}`);
+
     const res = await this.session.client.post(
       `${this.session.baseUrl}/game/town_overviews?${params}`,
       body.toString(),
       { headers: { ...this.session._headers(), "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "XMLHttpRequest" } }
     );
+
     const data = res.data?.json;
     if (!data?.success) {
-      // Log volledige response voor debugging
-      const errMsg = data?.error ?? data?.message ?? JSON.stringify(data).slice(0, 200);
+      const errMsg = data?.error ?? data?.message ?? JSON.stringify(res.data).slice(0, 200);
       logger.warn(`[API] Trade fout (${fromId}→${toId}): ${errMsg}`);
       throw new Error(errMsg ?? "Trade mislukt");
     }
