@@ -128,10 +128,11 @@ class VillageAgent {
       ? `harvest ${this.harvestTask.rounds_done + 1}/${this.harvestTask.rounds_total}` : blok.key;
     logger.info(`-- Ronde #${this.roundNum} | ${nlTime()} | ${modeLabel} --`);
 
-    // Config verversen — pikt wijzigingen op zonder sessie te herstarten
+    // Config verversen — pikt wijzigingen op (incl. dashboard toggles) zonder herstart
     try {
-      const freshConfig = await this.stats.fetchConfig();
-      Object.assign(this.config, freshConfig);
+      const fresh = await this.stats.fetchConfig();
+      Object.assign(this.config, fresh.config);
+      if (fresh.academie_steden) this.config.academie_steden = fresh.academie_steden;
       this.opties   = this.config.opties   ?? {};
       this.eilanden = this.config.eilanden ?? {};
     } catch (e) {
