@@ -128,6 +128,16 @@ class VillageAgent {
       ? `harvest ${this.harvestTask.rounds_done + 1}/${this.harvestTask.rounds_total}` : blok.key;
     logger.info(`-- Ronde #${this.roundNum} | ${nlTime()} | ${modeLabel} --`);
 
+    // Config verversen — pikt wijzigingen op zonder sessie te herstarten
+    try {
+      const freshConfig = await this.stats.fetchConfig();
+      Object.assign(this.config, freshConfig);
+      this.opties   = this.config.opties   ?? {};
+      this.eilanden = this.config.eilanden ?? {};
+    } catch (e) {
+      logger.warn(`[Sessie] Config refresh mislukt (lokale config behouden): ${e.message}`);
+    }
+
     await this.stats.updateStatus({
       bot_status: "running", current_session_id: this.sessionData.session_id,
       current_round: this.roundNum,
