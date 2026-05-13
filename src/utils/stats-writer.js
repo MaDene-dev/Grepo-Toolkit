@@ -161,7 +161,7 @@ class StatsWriter {
   // ── Config ophalen van GAS (live, elke ronde) ─────────────
   async fetchConfig() {
     const res = await this._get("getBotConfig");
-    if (res?.ok && res?.config) return res.config;
+    if (res?.ok && res?.config) return res;
     throw new Error(res?.error ?? "Geen config ontvangen");
   }
 
