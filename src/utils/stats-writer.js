@@ -158,6 +158,13 @@ class StatsWriter {
     await this._post("saveTradeLog", { world: this.world, ...logData });
   }
 
+  // ── Config ophalen van GAS (live, elke ronde) ─────────────
+  async fetchConfig() {
+    const res = await this._get("getBotConfig");
+    if (res?.ok && res?.config) return res.config;
+    throw new Error(res?.error ?? "Geen config ontvangen");
+  }
+
 }
 
 module.exports = StatsWriter;
