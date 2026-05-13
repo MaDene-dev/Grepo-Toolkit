@@ -132,9 +132,10 @@ class ResourceBalancer {
           if (donor.cap < minTransfer) break; // cap van donor op
           if (s[recv.id][roomKey] < minTransfer) continue; // ontvanger vol
 
-          const sendable = donor[res] - Math.floor(donor.storage * surplusDrempel / 100);
+          const sendable = Math.max(0, donor[res] - Math.floor(donor.storage * surplusDrempel / 100));
           const room     = s[recv.id][roomKey];
-          const amount   = Math.floor(Math.min(sendable, room, donor.cap) / 500) * 500;
+          const raw      = Math.min(sendable, room, donor.cap);
+          const amount   = Math.floor(Math.max(0, raw) / 500) * 500;
 
           logger.info(`[Resource Balancer]   ${RES_ICON[res]} ${donor.name}→${recv.name}: ` +
             `sendable=${sendable} room=${room} cap=${donor.cap} → ${amount}`);
