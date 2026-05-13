@@ -150,10 +150,7 @@ class VillageAgent {
       // 1. Data collectie (ronde 1 of GAS trigger)
       await this.dataCollector.run(this.roundNum, isGasTrigger);
 
-      // 2. Resource Balancer (elke ronde)
-      await this.resourceBalancer.run();
-
-      // 3. Farm Agent (elke ronde)
+      // 2. Farm Agent (elke ronde)
       const intervalKey = this.harvestTask ? this.harvestTask.interval_key : blok.key;
       const result = await this.farmAgent.run(allTowns, intervalKey);
       wood          = result.wood   ?? 0;
@@ -161,6 +158,9 @@ class VillageAgent {
       silver        = result.iron   ?? 0;
       farms         = result.farms  ?? 0;
       townSnapshots = result.townSnapshots ?? [];
+
+      // 3. Resource Balancer — na farming, zodat post-farm pieken worden meegenomen
+      await this.resourceBalancer.run();
 
     } catch (err) {
       const needsRelogin = err.message === "SESSION_EXPIRED" || err.message === "Geen steden gevonden.";
