@@ -549,8 +549,9 @@ class GrepolisAPI {
 
   // ── Grondstoffen versturen tussen eigen steden ────────────
   async tradeBetweenTowns(activeTownId, fromId, toId, wood, stone, iron) {
+    // town_id in URL = de verzendende stad (origin), niet zomaar de actieve stad
     const params = new URLSearchParams({
-      town_id: activeTownId, action: "trade_between_own_town", h: this.session.csrfToken,
+      town_id: fromId, action: "trade_between_own_town", h: this.session.csrfToken,
     });
     const body = new URLSearchParams({
       origin_town_id: String(fromId), target_town_id: String(toId),
@@ -562,7 +563,12 @@ class GrepolisAPI {
       { headers: { ...this.session._headers(), "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "XMLHttpRequest" } }
     );
     const data = res.data?.json;
-    if (!data?.success) throw new Error(data?.error ?? "Trade mislukt");
+    if (!data?.success) {
+      // Log volledige response voor debugging
+      const errMsg = data?.error ?? data?.message ?? JSON.stringify(data).slice(0, 200);
+      logger.warn(`[API] Trade fout (${fromId}→${toId}): ${errMsg}`);
+      throw new Error(errMsg ?? "Trade mislukt");
+    }
     const mov = data.movements?.[0];
     return { success: true, arrival: mov?.arrival ?? null, movementId: data.new_trade_movement };
   }
