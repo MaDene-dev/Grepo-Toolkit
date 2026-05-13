@@ -80,7 +80,7 @@ class ResourceBalancer {
 
     if (transfers.length === 0) {
       logger.info("[Resource Balancer] Geen transfers nodig");
-      return;
+      return false; // geen transfers uitgevoerd
     }
 
     // ── Combineer transfers (zelfde from→to) in één reis ──
@@ -93,6 +93,7 @@ class ResourceBalancer {
     }
 
     await this._execute(trips, tradeData.activeTownId, preview);
+    return true; // transfers uitgevoerd (of preview gedaan)
   }
 
   // ── Modus 1: Balans — alle matches, enkel cap als grens ──
