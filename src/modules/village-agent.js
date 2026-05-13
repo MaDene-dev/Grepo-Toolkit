@@ -171,7 +171,29 @@ class VillageAgent {
       townSnapshots = result.townSnapshots ?? [];
 
       // 3. Resource Balancer — na farming, zodat post-farm pieken worden meegenomen
-      await this.resourceBalancer.run();
+      const rbTransferred = await this.resourceBalancer.run();
+
+      // Als er transfers zijn uitgevoerd: verse stadsdata ophalen voor juiste snapshot
+      // (toont post-transfer waarden in het dashboard, niet pre-transfer)
+      if (rbTransferred && this.config.resource_balancer?.preview === false) {
+        try {
+          this.api.resetTowns();
+          const freshTowns = await this.api.getTowns();
+          await this.stats.saveTowns(freshTowns);
+          // Vervang farm-snapshots door post-transfer waarden
+          townSnapshots = freshTowns.map(t => ({
+            town_id: t.id, town_name: t.name,
+            wood: t.wood, stone: t.stone, silver: t.iron,
+            storage_max: t.storage_volume ?? 0,
+            pct_wood:   Math.round((t.wood  || 0) / (t.storage_volume || 1) * 100),
+            pct_stone:  Math.round((t.stone || 0) / (t.storage_volume || 1) * 100),
+            pct_silver: Math.round((t.iron  || 0) / (t.storage_volume || 1) * 100),
+          }));
+          logger.info(`[Sessie] Stadsdata ververd na resource balancer (${freshTowns.length} steden)`);
+        } catch (e) {
+          logger.warn(`[Sessie] Stadsdata refresh na balancer mislukt: ${e.message}`);
+        }
+      }
 
     } catch (err) {
       const needsRelogin = err.message === "SESSION_EXPIRED" || err.message === "Geen steden gevonden.";
