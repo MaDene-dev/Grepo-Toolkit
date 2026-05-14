@@ -235,6 +235,11 @@
       "note": "",
       "troops": "land",
       "role": "def"
+    },
+    "1180": {
+      "note": "",
+      "role": "def",
+      "troops": "land"
     }
   }
 }
