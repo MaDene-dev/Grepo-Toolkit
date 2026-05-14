@@ -1,9 +1,36 @@
 {
+  "eilanden": {
+    "471_519": {
+      "naam": "Eiland 471_519",
+      "primaire_stad_id": 1618
+    },
+    "461_508": {
+      "naam": "Polo's eiland",
+      "primaire_stad_id": 802
+    },
+    "469_511": {
+      "naam": "Eiland 469_511",
+      "primaire_stad_id": 1180
+    },
+    "_uitleg": "Welke stad grondstoffen ophaalt per eiland. Key = island_x_island_y",
+    "451_514": {
+      "naam": "Eiland 451_514",
+      "primaire_stad_id": 2207
+    },
+    "475_506": {
+      "naam": "Eiland 475_506",
+      "primaire_stad_id": 408
+    },
+    "475_503": {
+      "naam": "Marco's eiland",
+      "primaire_stad_id": 329
+    }
+  },
   "intervals": {
     "A": {
       "jitter_minutes": 2,
-      "interval_minutes": 10,
       "label": "10 min",
+      "interval_minutes": 10,
       "time_option_booty": 600,
       "time_option_base": 300
     },
@@ -28,33 +55,6 @@
       "interval_minutes": 480,
       "time_option_booty": 28800,
       "time_option_base": 14400
-    }
-  },
-  "eilanden": {
-    "471_519": {
-      "naam": "Eiland 471_519",
-      "primaire_stad_id": 1618
-    },
-    "469_511": {
-      "naam": "Eiland 469_511",
-      "primaire_stad_id": 1243
-    },
-    "461_508": {
-      "naam": "Polo's eiland",
-      "primaire_stad_id": 802
-    },
-    "_uitleg": "Welke stad grondstoffen ophaalt per eiland. Key = island_x_island_y",
-    "451_514": {
-      "naam": "Eiland 451_514",
-      "primaire_stad_id": 2207
-    },
-    "475_506": {
-      "naam": "Eiland 475_506",
-      "primaire_stad_id": 476
-    },
-    "475_503": {
-      "naam": "Marco's eiland",
-      "primaire_stad_id": 329
     }
   },
   "resource_balancer": {
@@ -83,14 +83,14 @@
     "rider": "off",
     "pegasus": "def",
     "calydonian_boar": "def",
-    "godsent": "both",
     "catapult": "off",
+    "godsent": "both",
     "spartoi": "off",
     "cerberus": "def",
     "demolition_ship": "off",
     "griffin": "off",
-    "bireme": "def",
     "manticore": "off",
+    "bireme": "def",
     "slinger": "off",
     "fury": "off",
     "big_transporter": "none",
@@ -98,8 +98,8 @@
     "colonize_ship": "none",
     "trireme": "both",
     "centaur": "def",
-    "ladon": "off",
     "sword": "both",
+    "ladon": "off",
     "minotaur": "both",
     "chariot": "off",
     "archer": "def",
@@ -146,28 +146,28 @@
       }
     ]
   },
+  "opties": {
+    "dorp_overslaan_kans": 0.02,
+    "captcha_pauze_min": 45,
+    "opslag_drempel_pct": 95,
+    "uitgebouwd_punten": 15532,
+    "_uitleg": "Alle instelbare parameters",
+    "extra_pauze_min_min": 5,
+    "precheck_buffer_min": 3,
+    "extra_pauze_max_min": 10,
+    "sessie_minuten": 45,
+    "extra_pauze_kans": 0.1,
+    "cooldown_snap_min": 4
+  },
   "email": {
     "smtp_port": 587,
     "smtp_host": "smtp.gmail.com",
     "enabled": true
   },
-  "opties": {
-    "dorp_overslaan_kans": 0.02,
-    "opslag_drempel_pct": 95,
-    "captcha_pauze_min": 45,
-    "_uitleg": "Alle instelbare parameters",
-    "extra_pauze_min_min": 5,
-    "precheck_buffer_min": 3,
-    "sessie_minuten": 45,
-    "extra_pauze_max_min": 10,
-    "extra_pauze_kans": 0.1,
-    "cooldown_snap_min": 4,
-    "uitgebouwd_punten": 15532
-  },
   "account": {
     "_uitleg": "Wordt overschreven door GREPO_ACCOUNT secret.",
-    "player_id": 0,
     "world": "",
+    "player_id": 0,
     "towns": []
   }
 }
