@@ -139,19 +139,59 @@
     "colonize_ship": "none"
   },
   "resource_balancer": {
-    "enabled": false,
-    "preview": true,
-    "balans": {
-      "enabled": true,
-      "surplus_drempel": 85,
-      "min_transfer": 1000
+    "preview": false,
+    "focus": {
+      "dorpen": [
+        {
+          "town_id": 3205,
+          "naam": "Stad van Marcotics",
+          "resources": [
+            "wood",
+            "stone",
+            "iron"
+          ],
+          "drempel_pct": 97
+        },
+        {
+          "town_id": 1180,
+          "naam": "03A.Christoffel",
+          "resources": [
+            "wood",
+            "iron"
+          ],
+          "drempel_pct": 97
+        },
+        {
+          "town_id": 2914,
+          "naam": "03C.Cortes",
+          "resources": [
+            "wood",
+            "stone",
+            "iron"
+          ],
+          "drempel_pct": 97
+        },
+        {
+          "town_id": 2913,
+          "naam": "03D.Francisco",
+          "resources": [
+            "wood",
+            "stone",
+            "iron"
+          ],
+          "drempel_pct": 97
+        }
+      ],
+      "enabled": true
     },
     "stadsfeest": {
       "enabled": false
     },
-    "focus": {
-      "enabled": false,
-      "dorpen": []
-    }
+    "balans": {
+      "min_transfer": 1000,
+      "surplus_drempel": 85,
+      "enabled": true
+    },
+    "enabled": true
   }
 }
