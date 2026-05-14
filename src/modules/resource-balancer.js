@@ -162,7 +162,9 @@ class ResourceBalancer {
 
           const room   = s[doel.id][roomKey];
           const raw    = Math.min(donor.maxSend, s[donor.id].cap, room, remaining);
-          const amount = Math.ceil(raw / 500) * 500;
+          let amount = Math.ceil(Math.max(0, raw) / 500) * 500;
+          // Cap door werkelijke voorraad (ceiling mag niet boven wat donor heeft)
+          if (amount > s[donor.id][res]) amount = Math.floor(s[donor.id][res] / 500) * 500;
           if (amount < minTransfer || amount > room) continue;
 
           logger.info(`[Resource Balancer]   ${RES_ICON[res]} ${donor.name}: max=${donor.maxSend} cap=${s[donor.id].cap} → ${amount}`);
@@ -238,7 +240,9 @@ class ResourceBalancer {
 
         const room   = s[doel.id][roomKey];
         const raw    = Math.min(donor.maxSend, s[donor.id].cap, room, remaining);
-        const amount = Math.ceil(raw / 500) * 500;
+        let amount = Math.ceil(Math.max(0, raw) / 500) * 500;
+          // Cap door werkelijke voorraad (ceiling mag niet boven wat donor heeft)
+          if (amount > s[donor.id][res]) amount = Math.floor(s[donor.id][res] / 500) * 500;
         if (amount < minTransfer || amount > room) continue;
 
         logger.info(`[Resource Balancer]   ${RES_ICON[res]} Donor ${donor.name}: max=${donor.maxSend} → ${amount}`);
@@ -303,7 +307,9 @@ class ResourceBalancer {
 
           const room   = Math.min(s[recv.id][roomKey], maxRecv);
           const raw    = Math.min(roundedSend, room, s[donor.id].cap);
-          const amount = Math.ceil(raw / 500) * 500;
+          let amount = Math.ceil(Math.max(0, raw) / 500) * 500;
+          // Cap door werkelijke voorraad (ceiling mag niet boven wat donor heeft)
+          if (amount > s[donor.id][res]) amount = Math.floor(s[donor.id][res] / 500) * 500;
           if (amount < minTransfer || amount > s[recv.id].storage - s[recv.id][res]) continue;
 
           logger.info(`[Resource Balancer]   ${RES_ICON[res]} ${donor.name}→${recv.name}: sendable=${sendable} rounded=${roundedSend} room=${room} → ${amount}`);
