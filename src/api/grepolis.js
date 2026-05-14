@@ -544,9 +544,12 @@ class GrepolisAPI {
     );
     const data = res.data?.json;
     if (!data?.towns?.length) return null;
-    // t_token is de "actieve" context-stad die Grepolis verwacht in trade POST calls
     const activeTownId = data.t_token ?? t.id;
-    return { activeTownId, towns: data.towns.map(tw => ({ ...tw, cap: tw.cap ?? 0 })) };
+    return {
+      activeTownId,
+      towns:     data.towns.map(tw => ({ ...tw, cap: tw.cap ?? 0 })),
+      movements: data.movements ?? [],
+    };
   }
 
   // ── Grondstoffen versturen tussen eigen steden ────────────
