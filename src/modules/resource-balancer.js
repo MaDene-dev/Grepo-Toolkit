@@ -93,7 +93,7 @@ class ResourceBalancer {
       allTransfers.push(...this._focusModus(s, inTransit));
     }
     if (this._cfg.stadsfeest?.enabled) {
-      allTransfers.push(...this._stadsfeestModus(s));
+      allTransfers.push(...this._stadsfeestModus(s, inTransit));
     }
     if (this._cfg.balans?.enabled !== false) {
       allTransfers.push(...this._balanceModus(s));
@@ -113,7 +113,9 @@ class ResourceBalancer {
       logger.info(`[Resource Balancer]   ${trip.from.padEnd(20)} → ${trip.to.padEnd(20)} ${parts}${modusLabel}`);
     }
 
+    if (!preview) await this.stats.updateStatus({ active_action: "trading" });
     await this._execute(trips, tradeData.activeTownId, preview);
+    if (!preview) await this.stats.updateStatus({ active_action: "" });
     return true;
   }
 
@@ -182,7 +184,7 @@ class ResourceBalancer {
   }
 
   // ── 🎉 Stadsfeest ─────────────────────────────────────────
-  _stadsfeestModus(s) {
+  _stadsfeestModus(s, inTransit) {
     const minTransfer = this._cfg.balans?.min_transfer ?? 1000;
 
     // Kandidaten: academie ≥ 30 EN opslag groot genoeg per resource
@@ -215,13 +217,15 @@ class ResourceBalancer {
     const transfers = [];
 
     for (const res of RESOURCES) {
-      const roomKey = _roomKey(res);
-      const tekort  = Math.max(0, FEEST_K[res] - s[doel.id][res]);
+      const roomKey  = _roomKey(res);
+      const transit  = (inTransit[doel.id] ?? {})[res] ?? 0;
+      const effectief = s[doel.id][res] + transit;
+      const tekort   = Math.max(0, FEEST_K[res] - effectief);
       if (tekort < minTransfer) {
-        logger.info(`[Resource Balancer]   ${RES_ICON[res]} ✓ ${s[doel.id][res].toLocaleString("nl-BE")} / ${FEEST_K[res].toLocaleString("nl-BE")}`);
+        logger.info(`[Resource Balancer]   ${RES_ICON[res]} ✓ ${effectief.toLocaleString("nl-BE")}/${FEEST_K[res].toLocaleString("nl-BE")} (${transit>0?"+"+transit.toLocaleString("nl-BE")+" onderweg":""})`);
         continue;
       }
-      logger.info(`[Resource Balancer]   ${RES_ICON[res]} tekort: ${tekort.toLocaleString("nl-BE")}`);
+      logger.info(`[Resource Balancer]   ${RES_ICON[res]} tekort: ${tekort.toLocaleString("nl-BE")}${transit>0?" ("+transit.toLocaleString("nl-BE")+" al onderweg)":""}`);
 
       let remaining = tekort;
       const donors = Object.values(s)
