@@ -161,9 +161,11 @@ class VillageAgent {
       // 1. Data collectie (ronde 1 of GAS trigger)
       await this.dataCollector.run(this.roundNum, isGasTrigger);
 
-      // 2. Farm Agent (elke ronde)
+      // 2. Farm Agent — actie-status instellen voor veilige inlogmelding
+      await this.stats.updateStatus({ active_action: "farming" });
       const intervalKey = this.harvestTask ? this.harvestTask.interval_key : blok.key;
       const result = await this.farmAgent.run(allTowns, intervalKey);
+      await this.stats.updateStatus({ active_action: "" });
       wood          = result.wood   ?? 0;
       stone         = result.stone  ?? 0;
       silver        = result.iron   ?? 0;
