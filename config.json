@@ -59,6 +59,10 @@
     "475_503": {
       "naam": "Marco's eiland",
       "primaire_stad_id": 329
+    },
+    "478_539": {
+      "naam": "Eiland 478_539",
+      "primaire_stad_id": 2315
     }
   },
   "resource_balancer": {
