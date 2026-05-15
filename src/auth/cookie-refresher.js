@@ -34,16 +34,23 @@ async function refreshCookies(config) {
     const ua = userAgents[Math.floor(Math.random() * userAgents.length)];
     await page.setUserAgent(ua);
 
-    // Stap 1: Portaal laden en inloggen
+    // Stap 1: Portaal laden en inloggen (originele werkende selectors)
     await page.goto(portal, { waitUntil: "networkidle2", timeout: 30000 });
-    await page.waitForSelector("#page_login_always-visible_input_player-identifier", { timeout: 15000 });
-    await page.click("#page_login_always-visible_input_player-identifier", { clickCount: 3 });
-    await page.type("#page_login_always-visible_input_player-identifier", username, { delay: 60 });
-    await page.click("#page_login_always-visible_input_password");
-    await page.type("#page_login_always-visible_input_password", password, { delay: 60 });
+    await page.waitForSelector("input[type='email'], input[name='login'], input[type='text']", { timeout: 15000 });
+
+    const emailField = await page.$("input[type='email']")
+                    ?? await page.$("input[name='login']")
+                    ?? await page.$("input[type='text']");
+    await emailField.click({ clickCount: 3 });
+    await emailField.type(username, { delay: 60 });
+
+    const passField = await page.$("input[type='password']");
+    await passField.click();
+    await passField.type(password, { delay: 60 });
+
     await Promise.all([
       page.waitForNavigation({ waitUntil: "networkidle2", timeout: 30000 }).catch(() => {}),
-      page.keyboard.press("Enter"),
+      passField.press("Enter"),
     ]);
     await new Promise(r => setTimeout(r, 3000));
 
