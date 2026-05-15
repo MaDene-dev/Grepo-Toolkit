@@ -71,16 +71,6 @@
             "stone",
             "iron"
           ],
-          "naam": "Stad van Marcotics",
-          "town_id": 3205,
-          "drempel_pct": 97
-        },
-        {
-          "resources": [
-            "wood",
-            "stone",
-            "iron"
-          ],
           "naam": "03C.Cortes",
           "town_id": 2914,
           "drempel_pct": 97
