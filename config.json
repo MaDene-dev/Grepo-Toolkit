@@ -102,6 +102,26 @@
           "naam": "04C.Hernan",
           "town_id": 441,
           "drempel_pct": 93
+        },
+        {
+          "town_id": 476,
+          "naam": "04B.Leif",
+          "resources": [
+            "wood",
+            "stone",
+            "iron"
+          ],
+          "drempel_pct": 93
+        },
+        {
+          "town_id": 290,
+          "naam": "01C.Da Gama",
+          "resources": [
+            "wood",
+            "stone",
+            "iron"
+          ],
+          "drempel_pct": 93
         }
       ],
       "enabled": true
@@ -111,8 +131,8 @@
     },
     "balans": {
       "min_transfer": 1500,
-      "surplus_drempel": 85,
-      "enabled": true
+      "enabled": true,
+      "surplus_drempel": 85
     },
     "enabled": true
   },
