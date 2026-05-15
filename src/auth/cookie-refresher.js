@@ -73,22 +73,11 @@ async function refreshCookies(config) {
     await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 30000 }).catch(() => {});
     await new Promise(r => setTimeout(r, 3000));
 
-    // Extra stap: als Grepolis een bevestigingspagina toont (select_new_world),
-    // klik dan door — daarna hervat hetzelfde flow als de eerste login
-    if (page.url().includes("select_new_world")) {
-      logger.info("[Puppeteer] Bevestigingspagina (select_new_world) — doorklikken...");
-      const clicked = await page.evaluate((w) => {
-        // Zoek link/knop die naar de wereld verwijst
-        const worldLink = document.querySelector(`a[href*="${w}"]`);
-        if (worldLink) { worldLink.click(); return worldLink.href; }
-        // Eerste beschikbare knop
-        const btn = document.querySelector("button, a.button, input[type=submit], .button_game");
-        if (btn) { btn.click(); return btn.className || btn.textContent?.trim(); }
-        return null;
-      }, world);
-      logger.info(`[Puppeteer] Geklikt: ${clicked || "niets gevonden"}`);
-      await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 30000 }).catch(() => {});
-      await new Promise(r => setTimeout(r, 3000));
+    // VEILIGHEID: als Grepolis select_new_world toont, NOOIT verder navigeren.
+    // Elke navigatiepoging riskeert een account op een nieuwe wereld aan te maken.
+    // Gooi een fout — de gebruiker moet manueel inloggen.
+    if (page.url().includes("select_new_world") || page.url().includes("choose_direction")) {
+      throw new Error(`Actieve gebruikerssessie gedetecteerd (${page.url()}). Log eerst manueel uit op grepolis.com voordat de bot opnieuw inlogt.`);
     }
 
     // Stap 3: Gebruik gecaptured login-URL indien beschikbaar (zelfde als eerste login)
