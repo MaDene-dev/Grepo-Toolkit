@@ -34,71 +34,62 @@ async function refreshCookies(config) {
     const ua = userAgents[Math.floor(Math.random() * userAgents.length)];
     await page.setUserAgent(ua);
 
-    // Vang de login-redirect op (nl133?login=1 — essentieel voor game session)
+    // Onderschep login-redirect
     let loginRedirectUrl = null;
     page.on("request", req => {
-      if (req.resourceType() !== "document") return;
       const url = req.url();
       if (url.includes(`${world}.grepolis.com`) && url.includes("login=1")) {
         loginRedirectUrl = url;
-        logger.info(`[Puppeteer] Login-redirect gevangen: ${url}`);
       }
     });
 
-    // Stap 1: Portaal laden en inloggen (originele werkende selectors)
+    // Stap 1: Portaal laden en inloggen
     await page.goto(portal, { waitUntil: "networkidle2", timeout: 30000 });
-    await page.waitForSelector("input[type='email'], input[name='login'], input[type='text']", { timeout: 15000 });
+    await page.waitForSelector("#page_login_always-visible_input_player-identifier", { timeout: 15000 });
+    await page.click("#page_login_always-visible_input_player-identifier", { clickCount: 3 });
+    await page.type("#page_login_always-visible_input_player-identifier", username, { delay: 50 });
+    await page.click("#page_login_always-visible_input_password");
+    await page.type("#page_login_always-visible_input_password", password, { delay: 50 });
 
-    const emailField = await page.$("input[type='email']")
-                    ?? await page.$("input[name='login']")
-                    ?? await page.$("input[type='text']");
-    await emailField.click({ clickCount: 3 });
-    await emailField.type(username, { delay: 60 });
+    const loginBtn = await page.evaluate(() => {
+      const btn = Array.from(document.querySelectorAll("button, a.button"))
+        .find(b => ["inloggen","login"].includes(b.textContent?.trim().toLowerCase()));
+      if (btn) { btn.click(); return true; }
+      return false;
+    });
 
-    const passField = await page.$("input[type='password']");
-    await passField.click();
-    await passField.type(password, { delay: 60 });
-
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: "networkidle2", timeout: 30000 }).catch(() => {}),
-      passField.press("Enter"),
-    ]);
+    await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 30000 }).catch(() => {});
     await new Promise(r => setTimeout(r, 3000));
 
-    // Stap 2: Als loginRedirectUrl gevangen → gebruik die (optimaal pad)
-    if (loginRedirectUrl) {
-      logger.info(`[Puppeteer] Navigeren via login-redirect...`);
-      await page.goto(loginRedirectUrl, { waitUntil: "networkidle2", timeout: 30000 });
-      await new Promise(r => setTimeout(r, 3000));
-    } else {
-      // Stap 2b: Navigeer direct naar game (fallback)
-      const gameUrl = `https://${world}.grepolis.com/game/${world}`;
-      logger.info(`[Puppeteer] Geen redirect gevangen — direct navigeren: ${gameUrl}`);
-      await page.goto(gameUrl, { waitUntil: "networkidle2", timeout: 30000 });
-      await new Promise(r => setTimeout(r, 4000));
+    // Stap 2: Wereldkeuze via nl0 form
+    await page.goto(index, { waitUntil: "networkidle2", timeout: 30000 });
+    await new Promise(r => setTimeout(r, 2000));
 
-      // Als pagina te klein: zoek wereld-link of gooi veilige fout
-      const midSize = (await page.content()).length;
-      logger.info(`[Puppeteer] Pagina: ${midSize} bytes | URL: ${page.url()}`);
-      if (midSize < 50000) {
-        if (page.url().includes("select_new_world") || page.url().includes("choose_direction")) {
-          throw new Error(`Actieve gebruikerssessie gedetecteerd. Log eerst uit op grepolis.com.`);
-        }
-        const worldLink = await page.$(`a[href*="${world}"]`);
-        if (worldLink) {
-          await Promise.all([
-            page.waitForNavigation({ waitUntil: "networkidle2", timeout: 30000 }).catch(() => {}),
-            worldLink.click(),
-          ]);
-          await new Promise(r => setTimeout(r, 4000));
-        }
+    await page.evaluate((world) => {
+      const form = document.querySelector('form[action*="login_to_game_world"]');
+      if (!form) return;
+      let input = form.querySelector('input[name="world"]');
+      if (!input) {
+        input = document.createElement("input");
+        input.type = "hidden"; input.name = "world";
+        form.appendChild(input);
       }
+      input.value = world;
+      form.submit();
+    }, world);
+
+    await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 30000 }).catch(() => {});
+    await new Promise(r => setTimeout(r, 4000));
+
+    // Stap 3: Navigeer naar login-redirect indien onderschept
+    if (loginRedirectUrl && !page.url().includes(`${world}.grepolis.com/game/${world}`)) {
+      await page.goto(loginRedirectUrl, { waitUntil: "networkidle2", timeout: 30000 });
+      await new Promise(r => setTimeout(r, 4000));
     }
 
+    const size = (await page.content()).length;
+    logger.info(`[Puppeteer] Eindpagina: ${size} bytes`);
 
-    const finalContent = await page.content();
-    const size = finalContent.length;
-    logger.info(`[Puppeteer] Eindpagina: ${size} bytes | URL: ${page.url()}`);
     if (size < 50000) throw new Error(`Pagina te klein (${size} bytes) — mogelijk CAPTCHA of verificatiepagina.`);
 
     // Stap 4: Cookies ophalen en opslaan
