@@ -34,6 +34,17 @@ async function refreshCookies(config) {
     const ua = userAgents[Math.floor(Math.random() * userAgents.length)];
     await page.setUserAgent(ua);
 
+    // Vang de login-redirect op (nl133?login=1 — essentieel voor game session)
+    let loginRedirectUrl = null;
+    page.on("request", req => {
+      if (req.resourceType() !== "document") return;
+      const url = req.url();
+      if (url.includes(`${world}.grepolis.com`) && url.includes("login=1")) {
+        loginRedirectUrl = url;
+        logger.info(`[Puppeteer] Login-redirect gevangen: ${url}`);
+      }
+    });
+
     // Stap 1: Portaal laden en inloggen (originele werkende selectors)
     await page.goto(portal, { waitUntil: "networkidle2", timeout: 30000 });
     await page.waitForSelector("input[type='email'], input[name='login'], input[type='text']", { timeout: 15000 });
@@ -54,35 +65,33 @@ async function refreshCookies(config) {
     ]);
     await new Promise(r => setTimeout(r, 3000));
 
-    // Stap 2: Navigeer direct naar de game-wereld (originele werkende aanpak)
-    const gameUrl = `https://${world}.grepolis.com/game/${world}`;
-    logger.info(`[Puppeteer] Navigeren naar game: ${gameUrl}`);
-    await page.goto(gameUrl, { waitUntil: "networkidle2", timeout: 30000 });
-    await new Promise(r => setTimeout(r, 4000));
+    // Stap 2: Als loginRedirectUrl gevangen → gebruik die (optimaal pad)
+    if (loginRedirectUrl) {
+      logger.info(`[Puppeteer] Navigeren via login-redirect...`);
+      await page.goto(loginRedirectUrl, { waitUntil: "networkidle2", timeout: 30000 });
+      await new Promise(r => setTimeout(r, 3000));
+    } else {
+      // Stap 2b: Navigeer direct naar game (fallback)
+      const gameUrl = `https://${world}.grepolis.com/game/${world}`;
+      logger.info(`[Puppeteer] Geen redirect gevangen — direct navigeren: ${gameUrl}`);
+      await page.goto(gameUrl, { waitUntil: "networkidle2", timeout: 30000 });
+      await new Promise(r => setTimeout(r, 4000));
 
-    // Stap 3: Als pagina te klein is, zoek de wereld-link op de keuzepagina
-    const midSize = (await page.content()).length;
-    logger.info(`[Puppeteer] Pagina: ${midSize} bytes | URL: ${page.url()}`);
-
-    if (midSize < 50000) {
-      // Veiligheidscheck: stop als er een concurrent sessie conflict is
-      // (select_new_world / choose_direction riskeert aanmaken van nieuwe werelden)
-      if (page.url().includes("select_new_world") || page.url().includes("choose_direction")) {
-        throw new Error(`Actieve gebruikerssessie gedetecteerd (${page.url()}). Log eerst uit op grepolis.com zodat de bot opnieuw kan inloggen.`);
-      }
-
-      // Normale keuzepagina: klik op de wereld-link
-      logger.info(`[Puppeteer] Pagina te klein — zoek wereld-link voor ${world}...`);
-      const worldLink = await page.$(`a[href*="${world}"]`);
-      if (worldLink) {
-        logger.info(`[Puppeteer] Wereld-link gevonden — klikken...`);
-        await Promise.all([
-          page.waitForNavigation({ waitUntil: "networkidle2", timeout: 30000 }).catch(() => {}),
-          worldLink.click(),
-        ]);
-        await new Promise(r => setTimeout(r, 4000));
-      } else {
-        logger.warn(`[Puppeteer] Geen wereld-link gevonden op ${page.url()}`);
+      // Als pagina te klein: zoek wereld-link of gooi veilige fout
+      const midSize = (await page.content()).length;
+      logger.info(`[Puppeteer] Pagina: ${midSize} bytes | URL: ${page.url()}`);
+      if (midSize < 50000) {
+        if (page.url().includes("select_new_world") || page.url().includes("choose_direction")) {
+          throw new Error(`Actieve gebruikerssessie gedetecteerd. Log eerst uit op grepolis.com.`);
+        }
+        const worldLink = await page.$(`a[href*="${world}"]`);
+        if (worldLink) {
+          await Promise.all([
+            page.waitForNavigation({ waitUntil: "networkidle2", timeout: 30000 }).catch(() => {}),
+            worldLink.click(),
+          ]);
+          await new Promise(r => setTimeout(r, 4000));
+        }
       }
     }
 
