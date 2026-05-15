@@ -26,16 +26,19 @@ class ResourceBalancer {
   // Hoeveel een stad maximaal kan doneren van een grondstof
   _donorVloer(townId, res, storage) {
     let vloer = 0;
-    // Focus-vloer
+    // Focus-vloer: altijd van toepassing voor focus-steden
     const focusCfg = (this._cfg.focus?.dorpen ?? [])
       .find(d => String(d.town_id) === String(townId));
     if (focusCfg && (focusCfg.resources ?? RESOURCES).includes(res)) {
       vloer = Math.max(vloer, Math.floor(storage * (focusCfg.drempel_pct ?? 97) / 100));
     }
-    // Academie-vloer (behoudt eigen feestkosten)
-    const acadLevel = this._acadSteden[String(townId)] ?? 0;
-    if (acadLevel >= 30 && storage >= Math.max(...Object.values(FEEST_K))) {
-      vloer = Math.max(vloer, FEEST_K[res]);
+    // Academie-vloer: ALLEEN als stadsfeest-modus actief is
+    // (anders blokkeert dit zinloos transfers wanneer geen feest gepland is)
+    if (this._cfg.stadsfeest?.enabled) {
+      const acadLevel = this._acadSteden[String(townId)] ?? 0;
+      if (acadLevel >= 30 && storage >= Math.max(...Object.values(FEEST_K))) {
+        vloer = Math.max(vloer, FEEST_K[res]);
+      }
     }
     return vloer;
   }
@@ -121,9 +124,26 @@ class ResourceBalancer {
 
   // ── 🎯 Focus ──────────────────────────────────────────────
   _focusModus(s, inTransit) {
-    const focusDorpen   = this._cfg.focus?.dorpen ?? [];
+    const focusDorpen   = [...(this._cfg.focus?.dorpen ?? [])];
     const minTransfer   = this._cfg.balans?.min_transfer ?? 1000;
     const transfers     = [];
+
+    // Sorteer op hoogste totaal tekort eerst zodat de meest urgente steden prioriteit krijgen
+    focusDorpen.sort((a, b) => {
+      const dA = s[a.town_id], dB = s[b.town_id];
+      if (!dA || !dB) return 0;
+      const drempelA = Math.floor(dA.storage * (a.drempel_pct ?? 97) / 100);
+      const drempelB = Math.floor(dB.storage * (b.drempel_pct ?? 97) / 100);
+      const tekortA = (a.resources ?? RESOURCES).reduce((sum, r) => {
+        const tr = (inTransit[a.town_id] ?? {})[r] ?? 0;
+        return sum + Math.max(0, drempelA - dA[r] - tr);
+      }, 0);
+      const tekortB = (b.resources ?? RESOURCES).reduce((sum, r) => {
+        const tr = (inTransit[b.town_id] ?? {})[r] ?? 0;
+        return sum + Math.max(0, drempelB - dB[r] - tr);
+      }, 0);
+      return tekortB - tekortA;
+    });
 
     for (const focus of focusDorpen) {
       const doel = s[focus.town_id];
