@@ -81,7 +81,7 @@
           ],
           "naam": "03C.Cortes",
           "town_id": 2914,
-          "drempel_pct": 93
+          "drempel_pct": 80
         },
         {
           "resources": [
@@ -91,7 +91,7 @@
           ],
           "naam": "03D.Francisco",
           "town_id": 2913,
-          "drempel_pct": 93
+          "drempel_pct": 80
         },
         {
           "resources": [
@@ -101,27 +101,17 @@
           ],
           "naam": "04C.Hernan",
           "town_id": 441,
-          "drempel_pct": 93
+          "drempel_pct": 80
         },
         {
-          "town_id": 476,
+          "resources": [
+            "wood",
+            "stone",
+            "iron"
+          ],
           "naam": "04B.Leif",
-          "resources": [
-            "wood",
-            "stone",
-            "iron"
-          ],
-          "drempel_pct": 93
-        },
-        {
-          "town_id": 290,
-          "naam": "01C.Da Gama",
-          "resources": [
-            "wood",
-            "stone",
-            "iron"
-          ],
-          "drempel_pct": 93
+          "town_id": 476,
+          "drempel_pct": 80
         }
       ],
       "enabled": true
