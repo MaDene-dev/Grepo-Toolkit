@@ -8,12 +8,13 @@ const COOKIES_FILE = path.join(__dirname, "../../cookies.json");
 async function refreshCookies(config) {
   const username = process.env.GREPO_EMAIL    || config.account.username;
   const password = process.env.GREPO_PASSWORD || config.account.password;
-  const world    = config.account.world;
+  const world    = (config.account?.world || '').trim();
+  if (!world) {
+    throw new Error('config.account.world is leeg — controleer config.json in de GitHub repository (account.world moet "nl133" zijn)');
+  }
   const lang     = world.match(/^([a-z]+)/)?.[1] ?? "nl";
   const portal   = `https://${lang}-play.grepolis.com`;
   const index    = `https://${lang}0.grepolis.com/start/index`;
-
-  if (!username || !password) throw new Error("GREPO_EMAIL en GREPO_PASSWORD vereist.");
 
   logger.info("[Puppeteer] Inloggen...");
   const browser = await puppeteer.launch({
@@ -101,25 +102,12 @@ async function refreshCookies(config) {
         return main ? main.innerHTML : document.body.innerHTML.slice(6000, 20000);
       });
       logger.info(`[Puppeteer] select_new_world content:\n${snwBody}`);
-
-      // Probeer de link voor de juiste wereld te vinden en te klikken
-      const worldLinkFound = await page.evaluate((world) => {
-        const link = document.querySelector(`a[href*="world_id=${world}"]`);
-        if (link) { link.click(); return link.href; }
-        return null;
-      }, world);
-
-      if (worldLinkFound) {
-        logger.info(`[Puppeteer] Wereld-link gevonden en geklikt: ${worldLinkFound}`);
-        await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 30000 }).catch(() => {});
-        await new Promise(r => setTimeout(r, 4000));
-        logger.info(`[Puppeteer] Na wereld-klik | URL: ${page.url()} | ${(await page.content()).length} bytes`);
-      } else {
-        throw new Error(
-          `select_new_world: geen link gevonden voor world_id=${world}. ` +
-          `Log uit op grepolis.com en probeer opnieuw.`
-        );
-      }
+      // nl133 staat NIET op deze pagina (alleen worlds zonder actief account).
+      // Nooit klikken — gooi een veilige fout.
+      throw new Error(
+        `select_new_world: world="${world}" staat niet op deze pagina. ` +
+        `Controleer of config.account.world correct is in config.json.`
+      );
     }
 
     // Stap 3: Navigeer naar login-redirect indien onderschept
