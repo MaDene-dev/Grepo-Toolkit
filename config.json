@@ -81,7 +81,7 @@
           ],
           "naam": "03C.Cortes",
           "town_id": 2914,
-          "drempel_pct": 97
+          "drempel_pct": 93
         },
         {
           "resources": [
@@ -91,7 +91,7 @@
           ],
           "naam": "03D.Francisco",
           "town_id": 2913,
-          "drempel_pct": 97
+          "drempel_pct": 93
         },
         {
           "resources": [
@@ -110,9 +110,9 @@
       "enabled": false
     },
     "balans": {
-      "min_transfer": 1000,
-      "surplus_drempel": 85,
-      "enabled": true
+      "min_transfer": 1500,
+      "enabled": true,
+      "surplus_drempel": 85
     },
     "enabled": true
   },
