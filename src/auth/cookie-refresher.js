@@ -94,9 +94,12 @@ async function refreshCookies(config) {
     // NOOIT verder navigeren — risico op aanmaken van nieuwe werelden.
     const currentUrl = page.url();
     if (currentUrl.includes("select_new_world") || currentUrl.includes("choose_direction")) {
-      // Log de body-inhoud zodat we de juiste selector kunnen bepalen
-      const snwBody = await page.evaluate(() => document.body ? document.body.innerHTML.slice(0, 6000) : "geen body");
-      logger.info(`[Puppeteer] select_new_world body:\n${snwBody}`);
+      // Log de relevante content zodat we de juiste selector kunnen bepalen
+      const snwBody = await page.evaluate(() => {
+        const main = document.getElementById('content_main') || document.getElementById('main') || document.getElementById('login_form');
+        return main ? main.innerHTML : document.body.innerHTML.slice(6000, 12000);
+      });
+      logger.info(`[Puppeteer] select_new_world content:\n${snwBody}`);
       throw new Error(
         `Actieve gebruikerssessie gedetecteerd (${currentUrl}). ` +
         `Log eerst uit op grepolis.com zodat de bot kan inloggen.`
