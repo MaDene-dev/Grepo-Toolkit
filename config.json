@@ -1,35 +1,4 @@
 {
-  "intervals": {
-    "A": {
-      "jitter_minutes": 2,
-      "label": "10 min",
-      "interval_minutes": 10,
-      "time_option_booty": 600,
-      "time_option_base": 300
-    },
-    "_uitleg": "A=10min/5min | B=40min/20min | C=3u/1u30 | D=8u/4u (booty/basis)",
-    "B": {
-      "jitter_minutes": 5,
-      "interval_minutes": 40,
-      "label": "40 min",
-      "time_option_booty": 2400,
-      "time_option_base": 1200
-    },
-    "C": {
-      "jitter_minutes": 10,
-      "label": "3u",
-      "interval_minutes": 180,
-      "time_option_booty": 10800,
-      "time_option_base": 5400
-    },
-    "D": {
-      "jitter_minutes": 20,
-      "interval_minutes": 480,
-      "label": "8u",
-      "time_option_booty": 28800,
-      "time_option_base": 14400
-    }
-  },
   "eilanden": {
     "471_519": {
       "naam": "Eiland 471_519",
@@ -43,11 +12,11 @@
       "naam": "Polo's eiland",
       "primaire_stad_id": 802
     },
-    "_uitleg": "Welke stad grondstoffen ophaalt per eiland. Key = island_x_island_y",
     "465_533": {
       "naam": "Eiland 465_533",
       "primaire_stad_id": 3205
     },
+    "_uitleg": "Welke stad grondstoffen ophaalt per eiland. Key = island_x_island_y",
     "451_514": {
       "naam": "Eiland 451_514",
       "primaire_stad_id": 2207
@@ -63,6 +32,37 @@
     "478_539": {
       "naam": "Eiland 478_539",
       "primaire_stad_id": 2315
+    }
+  },
+  "intervals": {
+    "A": {
+      "jitter_minutes": 2,
+      "label": "10 min",
+      "interval_minutes": 10,
+      "time_option_booty": 600,
+      "time_option_base": 300
+    },
+    "_uitleg": "A=10min/5min | B=40min/20min | C=3u/1u30 | D=8u/4u (booty/basis)",
+    "B": {
+      "jitter_minutes": 5,
+      "label": "40 min",
+      "interval_minutes": 40,
+      "time_option_booty": 2400,
+      "time_option_base": 1200
+    },
+    "C": {
+      "jitter_minutes": 10,
+      "label": "3u",
+      "interval_minutes": 180,
+      "time_option_booty": 10800,
+      "time_option_base": 5400
+    },
+    "D": {
+      "jitter_minutes": 20,
+      "label": "8u",
+      "interval_minutes": 480,
+      "time_option_booty": 28800,
+      "time_option_base": 14400
     }
   },
   "resource_balancer": {
@@ -90,13 +90,13 @@
           "drempel_pct": 97
         },
         {
-          "town_id": 441,
-          "naam": "04C.Hernan",
           "resources": [
             "wood",
             "stone",
             "iron"
           ],
+          "naam": "04C.Hernan",
+          "town_id": 441,
           "drempel_pct": 97
         }
       ],
@@ -122,8 +122,8 @@
     "rider": "off",
     "pegasus": "def",
     "calydonian_boar": "def",
-    "catapult": "off",
     "godsent": "both",
+    "catapult": "off",
     "spartoi": "off",
     "cerberus": "def",
     "demolition_ship": "off",
@@ -137,8 +137,8 @@
     "colonize_ship": "none",
     "trireme": "both",
     "centaur": "def",
-    "sword": "both",
     "ladon": "off",
+    "sword": "both",
     "minotaur": "both",
     "chariot": "off",
     "archer": "def",
@@ -186,10 +186,15 @@
       }
     ]
   },
+  "email": {
+    "smtp_port": 587,
+    "smtp_host": "smtp.gmail.com",
+    "enabled": true
+  },
   "account": {
     "_uitleg": "Wordt overschreven door GREPO_ACCOUNT secret.",
-    "world": "",
     "player_id": 0,
+    "world": "",
     "towns": []
   },
   "opties": {
@@ -203,12 +208,9 @@
     "precheck_buffer_min": 3,
     "sessie_minuten": 45,
     "extra_pauze_kans": 0.1,
-    "cooldown_snap_min": 4
-  },
-  "email": {
-    "smtp_port": 587,
-    "smtp_host": "smtp.gmail.com",
-    "enabled": true
+    "cooldown_snap_min": 4,
+    "balancer": true,
+    "balancer_drempel_pct": 90
   },
   "town_meta": {
     "290": {
@@ -238,8 +240,8 @@
     },
     "1243": {
       "note": "",
-      "role": "def",
-      "troops": "land"
+      "troops": "land",
+      "role": "def"
     }
   }
 }
