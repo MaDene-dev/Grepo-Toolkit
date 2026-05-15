@@ -102,16 +102,6 @@
           "naam": "04C.Hernan",
           "town_id": 441,
           "drempel_pct": 80
-        },
-        {
-          "resources": [
-            "wood",
-            "stone",
-            "iron"
-          ],
-          "naam": "04B.Leif",
-          "town_id": 476,
-          "drempel_pct": 80
         }
       ],
       "enabled": true
