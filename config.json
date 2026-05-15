@@ -84,6 +84,16 @@
           "naam": "03D.Francisco",
           "town_id": 2913,
           "drempel_pct": 97
+        },
+        {
+          "town_id": 441,
+          "naam": "04C.Hernan",
+          "resources": [
+            "wood",
+            "stone",
+            "iron"
+          ],
+          "drempel_pct": 97
         }
       ],
       "enabled": true
