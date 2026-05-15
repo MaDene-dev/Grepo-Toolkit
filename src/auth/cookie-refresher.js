@@ -71,6 +71,7 @@ async function refreshCookies(config) {
     logger.info(`[Puppeteer] nl0 geladen | URL: ${page.url()} | ${(await page.content()).length} bytes`);
     await new Promise(r => setTimeout(r, 2000));
 
+    logger.info(`[Puppeteer] World config: "${world}"`);
     const formFound = await page.evaluate((world) => {
       const form = document.querySelector('form[action*="login_to_game_world"]');
       if (!form) return false;
@@ -84,26 +85,41 @@ async function refreshCookies(config) {
       form.submit();
       return true;
     }, world);
-    logger.info(`[Puppeteer] Wereld-form ${formFound ? `gevonden en gesubmit voor ${world}` : "NIET gevonden op nl0 pagina"}`);
+    logger.info(`[Puppeteer] Wereld-form ${formFound ? `gevonden en gesubmit voor "${world}"` : "NIET gevonden op nl0 pagina"}`);
 
     await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 30000 }).catch(() => {});
     await new Promise(r => setTimeout(r, 4000));
     logger.info(`[Puppeteer] Na nl0 form | URL: ${page.url()} | ${(await page.content()).length} bytes | loginRedirectUrl: ${loginRedirectUrl || "niet gevangen"}`);
 
-    // VEILIGHEIDSCHECK: als Grepolis select_new_world of choose_direction toont,
-    // NOOIT verder navigeren — risico op aanmaken van nieuwe werelden.
+    // VEILIGHEIDSCHECK / WERELD-SELECTIE: als Grepolis select_new_world toont,
+    // zoek de link voor de juiste wereld en klik die — NOOIT zomaar de eerste knop klikken.
     const currentUrl = page.url();
     if (currentUrl.includes("select_new_world") || currentUrl.includes("choose_direction")) {
-      // Log de relevante content zodat we de juiste selector kunnen bepalen
+      // Log meer content voor diagnose
       const snwBody = await page.evaluate(() => {
-        const main = document.getElementById('content_main') || document.getElementById('main') || document.getElementById('login_form');
-        return main ? main.innerHTML : document.body.innerHTML.slice(6000, 12000);
+        const main = document.getElementById('content_main') || document.getElementById('main');
+        return main ? main.innerHTML : document.body.innerHTML.slice(6000, 20000);
       });
       logger.info(`[Puppeteer] select_new_world content:\n${snwBody}`);
-      throw new Error(
-        `Actieve gebruikerssessie gedetecteerd (${currentUrl}). ` +
-        `Log eerst uit op grepolis.com zodat de bot kan inloggen.`
-      );
+
+      // Probeer de link voor de juiste wereld te vinden en te klikken
+      const worldLinkFound = await page.evaluate((world) => {
+        const link = document.querySelector(`a[href*="world_id=${world}"]`);
+        if (link) { link.click(); return link.href; }
+        return null;
+      }, world);
+
+      if (worldLinkFound) {
+        logger.info(`[Puppeteer] Wereld-link gevonden en geklikt: ${worldLinkFound}`);
+        await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 30000 }).catch(() => {});
+        await new Promise(r => setTimeout(r, 4000));
+        logger.info(`[Puppeteer] Na wereld-klik | URL: ${page.url()} | ${(await page.content()).length} bytes`);
+      } else {
+        throw new Error(
+          `select_new_world: geen link gevonden voor world_id=${world}. ` +
+          `Log uit op grepolis.com en probeer opnieuw.`
+        );
+      }
     }
 
     // Stap 3: Navigeer naar login-redirect indien onderschept
