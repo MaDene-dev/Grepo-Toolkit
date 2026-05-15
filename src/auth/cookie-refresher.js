@@ -94,6 +94,9 @@ async function refreshCookies(config) {
     // NOOIT verder navigeren — risico op aanmaken van nieuwe werelden.
     const currentUrl = page.url();
     if (currentUrl.includes("select_new_world") || currentUrl.includes("choose_direction")) {
+      // Log de eerste 4000 tekens van de pagina zodat we de juiste selector kunnen bepalen
+      const snwContent = await page.content();
+      logger.info(`[Puppeteer] select_new_world pagina-inhoud (eerste 4000 tekens):\n${snwContent.slice(0, 4000)}`);
       throw new Error(
         `Actieve gebruikerssessie gedetecteerd (${currentUrl}). ` +
         `Log eerst uit op grepolis.com zodat de bot kan inloggen.`
