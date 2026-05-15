@@ -78,15 +78,6 @@
         {
           "resources": [
             "wood",
-            "iron"
-          ],
-          "naam": "03A.Christoffel",
-          "town_id": 1180,
-          "drempel_pct": 97
-        },
-        {
-          "resources": [
-            "wood",
             "stone",
             "iron"
           ],
@@ -112,8 +103,8 @@
     },
     "balans": {
       "min_transfer": 1000,
-      "enabled": true,
-      "surplus_drempel": 85
+      "surplus_drempel": 85,
+      "enabled": true
     },
     "enabled": true
   },
