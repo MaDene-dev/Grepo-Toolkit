@@ -562,7 +562,7 @@ class GrepolisAPI {
     const jsonPayload = JSON.stringify({
       from: fromId, to: toId,
       wood: wood || 0, stone: stone || 0, iron: iron || 0,
-      town_id: activeTownId, nl_init: true,
+      town_id: activeTownId,
     });
     const body = new URLSearchParams({ json: jsonPayload });
 
