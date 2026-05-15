@@ -131,7 +131,9 @@ class VillageAgent {
     // Config verversen — pikt wijzigingen op (incl. dashboard toggles) zonder herstart
     try {
       const fresh = await this.stats.fetchConfig();
+      const savedAccount = { ...this.config.account }; // bewaar secrets (world, player_id, username, password)
       Object.assign(this.config, fresh.config);
+      this.config.account = { ...this.config.account, ...savedAccount }; // herstel overschreven secrets
       if (fresh.academie_steden) this.config.academie_steden = fresh.academie_steden;
       this.opties   = this.config.opties   ?? {};
       this.eilanden = this.config.eilanden ?? {};
