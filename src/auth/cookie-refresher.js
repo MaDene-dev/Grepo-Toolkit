@@ -24,15 +24,13 @@ async function refreshCookies(config) {
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 800 });
-    // Roteer User-Agent om patroondetectie te vermijden
     const userAgents = [
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
       "Mozilla/5.0 (Windows NT 11.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     ];
-    const ua = userAgents[Math.floor(Math.random() * userAgents.length)];
-    await page.setUserAgent(ua);
+    await page.setUserAgent(userAgents[Math.floor(Math.random() * userAgents.length)]);
 
     // Onderschep login-redirect
     let loginRedirectUrl = null;
@@ -44,30 +42,38 @@ async function refreshCookies(config) {
     });
 
     // Stap 1: Portaal laden en inloggen
+    logger.info(`[Puppeteer] Stap 1: portaal laden → ${portal}`);
     await page.goto(portal, { waitUntil: "networkidle2", timeout: 30000 });
+    logger.info(`[Puppeteer] Portaal geladen | URL: ${page.url()} | ${(await page.content()).length} bytes`);
+
     await page.waitForSelector("#page_login_always-visible_input_player-identifier", { timeout: 15000 });
+    logger.info("[Puppeteer] Login-veld gevonden — credentials invullen...");
     await page.click("#page_login_always-visible_input_player-identifier", { clickCount: 3 });
     await page.type("#page_login_always-visible_input_player-identifier", username, { delay: 50 });
     await page.click("#page_login_always-visible_input_password");
     await page.type("#page_login_always-visible_input_password", password, { delay: 50 });
 
-    const loginBtn = await page.evaluate(() => {
+    const loginBtnFound = await page.evaluate(() => {
       const btn = Array.from(document.querySelectorAll("button, a.button"))
         .find(b => ["inloggen","login"].includes(b.textContent?.trim().toLowerCase()));
       if (btn) { btn.click(); return true; }
       return false;
     });
+    logger.info(`[Puppeteer] Login-knop ${loginBtnFound ? "geklikt" : "NIET gevonden — geen submit"}`);
 
     await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 30000 }).catch(() => {});
     await new Promise(r => setTimeout(r, 3000));
+    logger.info(`[Puppeteer] Na portal login | URL: ${page.url()} | loginRedirectUrl: ${loginRedirectUrl || "nog niet gevangen"}`);
 
     // Stap 2: Wereldkeuze via nl0 form
+    logger.info(`[Puppeteer] Stap 2: nl0 laden → ${index}`);
     await page.goto(index, { waitUntil: "networkidle2", timeout: 30000 });
+    logger.info(`[Puppeteer] nl0 geladen | URL: ${page.url()} | ${(await page.content()).length} bytes`);
     await new Promise(r => setTimeout(r, 2000));
 
-    await page.evaluate((world) => {
+    const formFound = await page.evaluate((world) => {
       const form = document.querySelector('form[action*="login_to_game_world"]');
-      if (!form) return;
+      if (!form) return false;
       let input = form.querySelector('input[name="world"]');
       if (!input) {
         input = document.createElement("input");
@@ -76,15 +82,32 @@ async function refreshCookies(config) {
       }
       input.value = world;
       form.submit();
+      return true;
     }, world);
+    logger.info(`[Puppeteer] Wereld-form ${formFound ? `gevonden en gesubmit voor ${world}` : "NIET gevonden op nl0 pagina"}`);
 
     await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 30000 }).catch(() => {});
     await new Promise(r => setTimeout(r, 4000));
+    logger.info(`[Puppeteer] Na nl0 form | URL: ${page.url()} | ${(await page.content()).length} bytes | loginRedirectUrl: ${loginRedirectUrl || "niet gevangen"}`);
+
+    // VEILIGHEIDSCHECK: als Grepolis select_new_world of choose_direction toont,
+    // NOOIT verder navigeren — risico op aanmaken van nieuwe werelden.
+    const currentUrl = page.url();
+    if (currentUrl.includes("select_new_world") || currentUrl.includes("choose_direction")) {
+      throw new Error(
+        `Actieve gebruikerssessie gedetecteerd (${currentUrl}). ` +
+        `Log eerst uit op grepolis.com zodat de bot kan inloggen.`
+      );
+    }
 
     // Stap 3: Navigeer naar login-redirect indien onderschept
     if (loginRedirectUrl && !page.url().includes(`${world}.grepolis.com/game/${world}`)) {
+      logger.info(`[Puppeteer] Stap 3: redirect URL gebruiken → ${loginRedirectUrl}`);
       await page.goto(loginRedirectUrl, { waitUntil: "networkidle2", timeout: 30000 });
       await new Promise(r => setTimeout(r, 4000));
+      logger.info(`[Puppeteer] Na redirect | URL: ${page.url()}`);
+    } else if (!loginRedirectUrl) {
+      logger.warn(`[Puppeteer] Stap 3: geen loginRedirectUrl gevangen — huidige URL: ${page.url()}`);
     }
 
     const size = (await page.content()).length;
@@ -105,7 +128,6 @@ async function refreshCookies(config) {
       expirationDate: c.expires > 0 ? c.expires : undefined,
     }));
 
-    // Minder dan 12 cookies = waarschijnlijk geen volledige game-sessie
     if (data.length < 12) {
       throw new Error(`Te weinig cookies (${data.length}) — mogelijk CAPTCHA of verificatie vereist. Log manueel in op grepolis.com.`);
     }
@@ -113,7 +135,6 @@ async function refreshCookies(config) {
     fs.writeFileSync(COOKIES_FILE, JSON.stringify(data, null, 2));
     logger.info(`[Puppeteer] ✓ ${data.length} cookies opgeslagen`);
 
-    // Update GREPO_COOKIES GitHub Secret zodat volgende run geen Puppeteer nodig heeft
     if (process.env.GITHUB_TOKEN && process.env.GITHUB_REPOSITORY) {
       try {
         await _updateGitHubSecret(JSON.stringify(data));
@@ -133,24 +154,16 @@ async function refreshCookies(config) {
 module.exports = { refreshCookies };
 
 async function _updateGitHubSecret(cookieJson) {
-  const https  = require("https");
-  const crypto = require("crypto");
   const [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
   const token  = process.env.GITHUB_TOKEN;
-
-  // Stap 1: haal public key op
   const pubKeyData = await _ghRequest("GET",
     `/repos/${owner}/${repo}/actions/secrets/public-key`, null, token);
-
-  // Stap 2: encrypt met libsodium-wrappers
   const sodium = require("libsodium-wrappers");
   await sodium.ready;
   const key       = sodium.from_base64(pubKeyData.key, sodium.base64_variants.ORIGINAL);
   const msg       = sodium.from_string(cookieJson);
   const encrypted = sodium.crypto_box_seal(msg, key);
   const b64       = sodium.to_base64(encrypted, sodium.base64_variants.ORIGINAL);
-
-  // Stap 3: update secret
   await _ghRequest("PUT",
     `/repos/${owner}/${repo}/actions/secrets/GREPO_COOKIES`,
     { encrypted_value: b64, key_id: pubKeyData.key_id }, token);
