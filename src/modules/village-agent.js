@@ -167,7 +167,11 @@ class VillageAgent {
       await this.stats.updateStatus({ active_action: "farming" });
       const intervalKey = this.harvestTask ? this.harvestTask.interval_key : blok.key;
       const result = await this.farmAgent.run(allTowns, intervalKey);
-      await this.stats.updateStatus({ active_action: "" });
+      await this.stats.updateStatus({
+        active_action: "",
+        last_farm_count: result.farms ?? 0,
+        last_farm_total: allTowns.length,
+      });
       wood          = result.wood   ?? 0;
       stone         = result.stone  ?? 0;
       silver        = result.iron   ?? 0;
