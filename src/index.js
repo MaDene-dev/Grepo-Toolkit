@@ -67,9 +67,8 @@ async function boot() {
   const gasSecret = process.env.GAS_SECRET;
   if (gasUrl && gasSecret) {
     try {
-      const holdRes  = await require("node-fetch")(
-        `${gasUrl}?action=getLoginHold&secret=${gasSecret}`,
-        { signal: AbortSignal.timeout?.(8000) }
+      const holdRes  = await fetch(
+        `${gasUrl}?action=getLoginHold&secret=${gasSecret}`
       ).catch(() => null);
       const holdData = holdRes ? await holdRes.json().catch(() => ({})) : {};
       if (holdData.hold_until && holdData.hold_until > Date.now()) {
