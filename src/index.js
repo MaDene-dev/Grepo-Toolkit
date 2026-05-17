@@ -62,6 +62,26 @@ async function boot() {
   logger.info(`[Boot] Grepo Toolkit v2 | ${sessionId} | ${triggerSource}`);
   logger.info(`[Boot] Sessie stop om ${nlTime(autoStopAt)}`);
 
+  // ── Inlog-slot check — vóór alles ──────────────────────────
+  const gasUrl    = process.env.GAS_URL;
+  const gasSecret = process.env.GAS_SECRET;
+  if (gasUrl && gasSecret) {
+    try {
+      const holdRes  = await require("node-fetch")(
+        `${gasUrl}?action=getLoginHold&secret=${gasSecret}`,
+        { signal: AbortSignal.timeout?.(8000) }
+      ).catch(() => null);
+      const holdData = holdRes ? await holdRes.json().catch(() => ({})) : {};
+      if (holdData.hold_until && holdData.hold_until > Date.now()) {
+        const minLeft = Math.ceil((holdData.hold_until - Date.now()) / 60000);
+        logger.info(`[Boot] ⏸ Inlog-slot gereserveerd door gebruiker — run overgeslagen (nog ${minLeft} min)`);
+        process.exit(0);
+      }
+    } catch (e) {
+      logger.warn(`[Boot] Login-hold check mislukt (wordt genegeerd): ${e.message}`);
+    }
+  }
+
   const stats  = new StatsWriter(config);
   const mailer = new Mailer(config);
 
