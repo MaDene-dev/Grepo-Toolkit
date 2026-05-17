@@ -81,7 +81,7 @@
           ],
           "naam": "03C.Cortes",
           "town_id": 2914,
-          "drempel_pct": 80
+          "drempel_pct": 60
         },
         {
           "resources": [
@@ -91,7 +91,7 @@
           ],
           "naam": "03D.Francisco",
           "town_id": 2913,
-          "drempel_pct": 80
+          "drempel_pct": 60
         },
         {
           "resources": [
@@ -101,7 +101,7 @@
           ],
           "naam": "04C.Hernan",
           "town_id": 441,
-          "drempel_pct": 80
+          "drempel_pct": 60
         },
         {
           "resources": [
@@ -111,18 +111,18 @@
           ],
           "naam": "06B.Henry",
           "town_id": 1823,
-          "drempel_pct": 80
+          "drempel_pct": 60
         }
       ],
       "enabled": true
     },
     "stadsfeest": {
-      "enabled": false
+      "enabled": true
     },
     "balans": {
       "min_transfer": 1500,
-      "enabled": true,
-      "surplus_drempel": 85
+      "surplus_drempel": 85,
+      "enabled": false
     },
     "enabled": true
   },
