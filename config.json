@@ -114,14 +114,14 @@
           "drempel_pct": 80
         },
         {
-          "town_id": 291,
-          "naam": "01B.Vasco",
+          "town_id": 290,
+          "naam": "01C.Da Gama",
           "resources": [
             "wood",
             "stone",
             "iron"
           ],
-          "drempel_pct": 98
+          "drempel_pct": 97
         }
       ],
       "enabled": true
@@ -131,8 +131,8 @@
     },
     "balans": {
       "min_transfer": 1500,
-      "surplus_drempel": 85,
-      "enabled": false
+      "enabled": false,
+      "surplus_drempel": 85
     },
     "enabled": true
   },
