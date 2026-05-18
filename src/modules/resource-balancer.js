@@ -18,6 +18,11 @@ class ResourceBalancer {
     this.api    = api;
     this.config = config;
     this.stats  = stats;
+    this._cultuurTargets = []; // tijdelijke targets van CultureAgent
+  }
+
+  setCultuurTargets(targets) {
+    this._cultuurTargets = targets ?? [];
   }
 
   get _cfg() { return this.config.resource_balancer ?? {}; }
@@ -124,7 +129,16 @@ class ResourceBalancer {
 
   // ── 🎯 Focus ──────────────────────────────────────────────
   _focusModus(s, inTransit) {
-    const focusDorpen   = [...(this._cfg.focus?.dorpen ?? [])];
+    // Voeg cultuur-targets toe als tijdelijke focus-dorpen
+    const cultuurFocus = this._cultuurTargets.map(ct => ({
+      town_id:    ct.town_id,
+      naam:       ct.naam,
+      resources:  Object.keys(ct.resources),  // ["wood","stone","iron"]
+      drempel_pct: 99,  // zo vol mogelijk voor de viering
+      _cultuur:   true,
+      _costs:     ct.resources,
+    }));
+    const focusDorpen   = [...(this._cfg.focus?.dorpen ?? []), ...cultuurFocus];
     const minTransfer   = this._cfg.balans?.min_transfer ?? 1000;
     const transfers     = [];
 
