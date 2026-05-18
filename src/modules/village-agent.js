@@ -180,14 +180,20 @@ class VillageAgent {
       farms         = result.farms  ?? 0;
       townSnapshots = result.townSnapshots ?? [];
 
-      // 3. Cultuur Agent — bepaalt RB-targets voor vieringen
+      // 3. Cultuur Agent — globale data altijd ophalen (CP/level/GP voor KPI)
+      try {
+        await this.cultureAgent.collectGlobalData(allTowns);
+      } catch (e) {
+        logger.warn(`[Cultuur] Globale data fout: ${e.message}`);
+      }
+
+      // 4. Cultuur automatie — enkel wanneer enabled en dorpen geconfigureerd
       let cultureRbTargets = [];
       try {
         const cultResult = await this.cultureAgent.run(allTowns);
         cultureRbTargets = cultResult.rbTargets ?? [];
         if (cultureRbTargets.length) {
           logger.info(`[Cultuur] ${cultureRbTargets.length} RB-target(s) voor vieringen`);
-          // Inject cultuur-targets tijdelijk in de resource balancer
           this.resourceBalancer.setCultuurTargets(cultureRbTargets);
         }
       } catch (e) {
