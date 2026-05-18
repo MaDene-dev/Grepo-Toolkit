@@ -583,6 +583,42 @@ class GrepolisAPI {
     const mov = data.movements?.[0];
     return { success: true, arrival: mov?.arrival ?? null, movementId: data.new_trade_movement };
   }
+
+  // ── Cultuur ────────────────────────────────────────────────────
+
+  async getCultureOverview(townId) {
+    const params = new URLSearchParams({
+      town_id: townId,
+      action:  "culture_overview",
+      h:       this.session.csrfToken,
+      json:    JSON.stringify({ town_id: townId, nl_init: true }),
+      _:       Date.now(),
+    });
+    const res = await this.session.client.get(
+      `${this.session.baseUrl}/game/town_overviews?${params}`,
+      { headers: { ...this.session._headers(), "X-Requested-With": "XMLHttpRequest", Accept: "application/json, */*" } }
+    );
+    if (this.session._isSessionExpired(res)) throw new Error("SESSION_EXPIRED");
+    return res.data?.json ?? res.data;
+  }
+
+  async startCelebration(type, townId) {
+    const params = new URLSearchParams({
+      town_id:          townId,
+      action:           "start_celebration",
+      h:                this.session.csrfToken,
+      celebration_type: type,
+      _:                Date.now(),
+    });
+    const res = await this.session.client.post(
+      `${this.session.baseUrl}/game/town_overviews?${params}`,
+      new URLSearchParams({ json: JSON.stringify({ town_id: townId }) }).toString(),
+      { headers: { ...this.session._headers(), "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "X-Requested-With": "XMLHttpRequest", Accept: "application/json, */*" } }
+    );
+    if (this.session._isSessionExpired(res)) throw new Error("SESSION_EXPIRED");
+    return res.data?.json ?? res.data;
+  }
+
 }
 
 module.exports = GrepolisAPI;
