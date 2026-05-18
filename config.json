@@ -99,19 +99,19 @@
             "stone",
             "iron"
           ],
-          "naam": "04C.Hernan",
-          "town_id": 441,
+          "naam": "06B.Henry",
+          "town_id": 1823,
           "drempel_pct": 60
         },
         {
+          "town_id": 476,
+          "naam": "04B.Leif",
           "resources": [
             "wood",
             "stone",
             "iron"
           ],
-          "naam": "06B.Henry",
-          "town_id": 1823,
-          "drempel_pct": 60
+          "drempel_pct": 80
         }
       ],
       "enabled": true
@@ -121,8 +121,8 @@
     },
     "balans": {
       "min_transfer": 1500,
-      "surplus_drempel": 85,
-      "enabled": false
+      "enabled": false,
+      "surplus_drempel": 85
     },
     "enabled": true
   },
