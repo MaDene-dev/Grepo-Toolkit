@@ -32,7 +32,28 @@ class CultureAgent {
   get _dorpen() { return this.config?.cultuur?.dorpen ?? []; }
   get _enabled() { return this.config?.cultuur?.enabled === true && this._dorpen.length > 0; }
 
-  // ── Hoofdloop ─────────────────────────────────────────────────
+  // ── Globale data altijd ophalen (1 call per sessie voor KPI) ──
+  async collectGlobalData(towns) {
+    if (!towns?.length || this._globalDataFetched) return;
+    this._globalDataFetched = true;
+    const town = towns[0];
+    try {
+      const overview = await this.api.getCultureOverview(town.id);
+      if (!overview) return;
+      const parsed = this._parse(overview, town.id);
+      if (parsed.playerKills != null)    this.playerKills    = parsed.playerKills;
+      if (parsed.neededKills)            this.neededKills    = parsed.neededKills;
+      if (parsed.culturalLevel)          this.culturalLevel  = parsed.culturalLevel;
+      if (parsed.culturalPoints != null) this.culturalPoints = parsed.culturalPoints;
+      if (parsed.culturalMax)            this.culturalMax    = parsed.culturalMax;
+      if (parsed.citiesCur != null)      this.citiesCur      = parsed.citiesCur;
+      if (parsed.citiesMax != null)      this.citiesMax      = parsed.citiesMax;
+      await this._saveStatus({});
+      logger.info(`[Cultuur] Data: level ${this.culturalLevel} | CP ${this.culturalPoints}/${this.culturalMax} | GP ${this.playerKills}`);
+    } catch (e) {
+      logger.warn(`[Cultuur] Globale data ophalen mislukt: ${e.message}`);
+    }
+  }
 
   async run(allTowns) {
     if (!this._enabled) return { rbTargets: [] };
