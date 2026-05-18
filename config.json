@@ -91,7 +91,7 @@
           ],
           "naam": "03D.Francisco",
           "town_id": 2913,
-          "drempel_pct": 80
+          "drempel_pct": 60
         },
         {
           "resources": [
@@ -112,6 +112,16 @@
           "naam": "04B.Leif",
           "town_id": 476,
           "drempel_pct": 80
+        },
+        {
+          "town_id": 291,
+          "naam": "01B.Vasco",
+          "resources": [
+            "wood",
+            "stone",
+            "iron"
+          ],
+          "drempel_pct": 98
         }
       ],
       "enabled": true
@@ -121,8 +131,8 @@
     },
     "balans": {
       "min_transfer": 1500,
-      "enabled": false,
-      "surplus_drempel": 85
+      "surplus_drempel": 85,
+      "enabled": false
     },
     "enabled": true
   },
